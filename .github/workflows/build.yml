@@ -1,0 +1,133 @@
+name: Build AppData (Rootful & Rootless)
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build iOS Tweak
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Build Dependencies
+        run: |
+          brew install dpkg ldid
+
+      - name: Mock Build Environment (Theos & MonkeyDev)
+        run: |
+          # 1. 创建并提权伪装目录
+          sudo mkdir -p /opt/MonkeyDev/bin
+          sudo mkdir -p /opt/MonkeyDev/frameworks
+          sudo mkdir -p /opt/theos/vendor/lib
+          sudo chown -R $USER /opt/MonkeyDev
+          sudo chown -R $USER /opt/theos
+          
+          # 获取系统 iOS SDK 真实路径，用于伪造 iOS 动态库
+          IOS_SDK=$(xcrun --sdk iphoneos --show-sdk-path)
+          
+          # 2. 伪造 MonkeyDev 打包脚本
+          echo -e '#!/bin/bash\nexit 0' > /opt/MonkeyDev/bin/md
+          chmod +x /opt/MonkeyDev/bin/md
+          
+          # 3. 伪造 Substrate 动态库骗过 Linker，追加 -install_name 映射到真实路径
+          echo "" | clang -dynamiclib -arch arm64 -arch arm64e -isysroot $IOS_SDK -install_name /Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate -o /opt/MonkeyDev/frameworks/libsubstrate.dylib -x c -
+          
+          # 4. 重写 Prefix.pch，注入 ObjC Runtime 底层支持和 HBLogDebug 宏
+          cat << 'EOF' > /opt/theos/Prefix.pch
+          #ifdef __OBJC__
+          #import <Foundation/Foundation.h>
+          #import <UIKit/UIKit.h>
+          #import <objc/runtime.h>
+          #import <objc/message.h>
+          #define HBLogDebug(...) NSLog(__VA_ARGS__)
+          #endif
+          EOF
+          
+          # 5. 本地手写一份极简的 substrate.h
+          mkdir -p vendor/include
+          cat << 'EOF' > vendor/include/substrate.h
+          #ifndef SUBSTRATE_H
+          #define SUBSTRATE_H
+          #include <objc/runtime.h>
+          #include <objc/message.h>
+          #ifdef __cplusplus
+          extern "C" {
+          #endif
+          void MSHookMessageEx(Class _class, SEL sel, IMP imp, IMP *result);
+          void MSHookFunction(void *symbol, void *replace, void **result);
+          #ifdef __cplusplus
+          }
+          #endif
+          #endif
+          EOF
+
+          # 6. 伪造 CydiaSubstrate 框架结构，追加 -install_name 映射到越狱机真实路径
+          mkdir -p vendor/frameworks/CydiaSubstrate.framework
+          echo "" | clang -dynamiclib -arch arm64 -arch arm64e -isysroot $IOS_SDK -install_name /Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate -o vendor/frameworks/CydiaSubstrate.framework/CydiaSubstrate -x c -
+          
+          # 7. 伪造 Apple 私有 Preferences 框架结构，追加 -install_name 映射到 iOS 真实系统私有库路径
+          mkdir -p vendor/frameworks/Preferences.framework
+          echo "" | clang -dynamiclib -arch arm64 -arch arm64e -isysroot $IOS_SDK -install_name /System/Library/PrivateFrameworks/Preferences.framework/Preferences -o vendor/frameworks/Preferences.framework/Preferences -x c -
+
+      - name: Build Xcode Project (Errors & Warnings Only)
+        run: |
+          xcodebuild -project AppData.xcodeproj -scheme AppData -configuration Release ARCHS="arm64 arm64e" SYMROOT="$(pwd)/build" \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO DEVELOPMENT_TEAM="" \
+            HEADER_SEARCH_PATHS="$(pwd)/vendor/include" \
+            FRAMEWORK_SEARCH_PATHS="$(pwd)/vendor/frameworks" \
+            OTHER_LDFLAGS="-undefined dynamic_lookup" \
+            -quiet build
+          
+          xcodebuild -project AppData.xcodeproj -scheme AppDataPrefs -configuration Release ARCHS="arm64 arm64e" SYMROOT="$(pwd)/build" \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO DEVELOPMENT_TEAM="" \
+            HEADER_SEARCH_PATHS="$(pwd)/vendor/include" \
+            FRAMEWORK_SEARCH_PATHS="$(pwd)/vendor/frameworks" \
+            OTHER_LDFLAGS="-undefined dynamic_lookup" \
+            -quiet build
+
+      - name: Pseudo-sign Binaries (ldid)
+        run: |
+          ldid -S build/Release-iphoneos/AppData.dylib
+          ldid -S build/Release-iphoneos/AppDataPrefs.bundle/AppDataPrefs
+
+      - name: Package Rootful DEB
+        run: |
+          # 把项目内自带的真实 Package 模板文件夹拷贝到当前根目录
+          cp -r AppData/Package ./Package
+          
+          # 将编译出的 dylib 放入模板的动态库目录中
+          cp build/Release-iphoneos/AppData.dylib Package/Library/MobileSubstrate/DynamicLibraries/
+          
+          # 将编译出的设置面板内容合并进模板的 Bundle 中
+          cp -a build/Release-iphoneos/AppDataPrefs.bundle/* Package/Library/PreferenceBundles/AppDataPrefs.bundle/
+          
+          # 打包 Rootful
+          dpkg-deb -Zgzip -b Package AppData-Rootful.deb
+
+      - name: Package Rootless DEB
+        run: |
+          # 复制 Rootful 目录作为 Rootless 基础
+          cp -r Package Package_Rootless
+          
+          # 修正 Rootless 架构
+          sed -i '' 's/Architecture: iphoneos-arm/Architecture: iphoneos-arm64/g' Package_Rootless/DEBIAN/control
+          
+          # 迁移文件路径适配 Rootless
+          mkdir -p Package_Rootless/var/jb
+          mv Package_Rootless/Library Package_Rootless/var/jb/
+          
+          # 打包 Rootless
+          dpkg-deb -Zgzip -b Package_Rootless AppData-Rootless.deb
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppData-Deb-Packages
+          path: ./*.deb
