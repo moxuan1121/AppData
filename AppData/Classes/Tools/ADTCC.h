@@ -1,15 +1,17 @@
 //
-//  ADTCC.h
+//  TCC.h
 //  AppData
+//
+//  Created by udevs on 21/11/2020.
 //
 
 #ifndef ADTCC_h
 #define ADTCC_h
 
-#import <Foundation/Foundation.h>
+FOUNDATION_EXTERN NSString *const kTCCServiceAll;
 
-// 增加 AD_ 前缀，彻底避免和底层 SDK 或其他文件产生同名冲突
-FOUNDATION_EXTERN int AD_TCCAccessResetForBundleIdentifier(NSString *service, NSString *bundleIdentifier);
-FOUNDATION_EXTERN NSArray<NSDictionary *> *AD_TCCAccessCopyInformationForBundleIdentifier(NSString *bundleIdentifier);
+FOUNDATION_EXTERN int TCCAccessResetForBundle(NSString *service, CFBundleRef bundle);
 
-#endif /* ADTCC_h */
+FOUNDATION_EXTERN NSArray<NSDictionary *> *TCCAccessCopyInformationForBundle(CFBundleRef bundle);
+
+#endif /* TCC_h */
