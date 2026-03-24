@@ -1,19 +1,37 @@
 #import "Classes/Controller/ADDataViewController.h"
 
-// 声明遵循 UIGestureRecognizerDelegate 协议
+// 声明扩展与代理
 @interface SBIconImageView (AppData) <UIGestureRecognizerDelegate>
+@property (nonatomic, retain) UISwipeGestureRecognizer *adSwipeGestureRecognizer;
+@property (nonatomic, readonly) SBIcon *icon;
+- (void)appDataPreferencesChanged;
 @end
 
-// 声明 iOS 15/16 渲染相关的结构体和接口
-struct SBIconImageInfo {
-    CGSize size;
-    CGFloat scale;
-    CGFloat continuousCornerRadius;
-};
-
-// 修复编译报错：删除 SBIcon 的重复声明，因为 Headers.h 中已经有了
-@interface SBLeafIcon : SBIcon
+// 声明 iOS 14-16 的底层图标缓存类，解决动画闪回的核心！
+@interface SBHIconImageCache : NSObject
+- (UIImage *)imageForIcon:(SBIcon *)icon;
+- (UIImage *)unmaskedImageForIcon:(SBIcon *)icon;
 @end
+
+// 统一提取自定义图标的 Helper 方法
+static UIImage *ADGetCustomIconImage(SBIcon *icon) {
+    if (!icon) return nil;
+    NSString *bundleID = nil;
+    if ([icon respondsToSelector:@selector(applicationBundleIdentifier)]) {
+        bundleID = [icon performSelector:@selector(applicationBundleIdentifier)];
+    } else if ([icon respondsToSelector:@selector(applicationBundleID)]) {
+        bundleID = [icon performSelector:@selector(applicationBundleID)];
+    }
+    
+    if (bundleID && [bundleID isKindOfClass:[NSString class]]) {
+        NSString *customPath = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:customPath]) {
+            UIImage *customImage = [UIImage imageWithContentsOfFile:customPath];
+            if (customImage) return customImage;
+        }
+    }
+    return nil;
+}
 
 %group SHARED_HOOKS
 
@@ -24,22 +42,16 @@ struct SBIconImageInfo {
 %property (nonatomic, retain) UISwipeGestureRecognizer *adSwipeGestureRecognizer;
 
 - (SBIconImageView *)initWithFrame:(CGRect)arg1 {
-    %log;
     SBIconImageView *r = %orig;
     if (![r isKindOfClass:NSClassFromString(@"SBFolderIconImageView")]
         && [r respondsToSelector:@selector(setAdSwipeGestureRecognizer:)]) {
         [[NSNotificationCenter defaultCenter] addObserver:r selector:@selector(appDataPreferencesChanged) name:kAppDataSwipeUpPreferencesChangedNotification object:nil];
         
-        // Create Gesture Recognizer
         self.adSwipeGestureRecognizer = [[UISwipeGestureRecognizer alloc] initWithTarget:r action:@selector(appDataDidSwipeUp:)];
         self.adSwipeGestureRecognizer.direction = (UISwipeGestureRecognizerDirectionUp);
-        
-        // 【关键修复】：设置代理，允许手势共存与干预
         self.adSwipeGestureRecognizer.delegate = (id<UIGestureRecognizerDelegate>)r;
         
         r.userInteractionEnabled = YES;
-        
-        // Add gesture if enabled
         [self appDataPreferencesChanged];
     }
     return r;
@@ -57,7 +69,6 @@ struct SBIconImageInfo {
         }
     }
 
-    // 新增：同时把图标缓存/显示也刷新掉
     if ([self respondsToSelector:@selector(clearCachedImages)]) {
         [self performSelector:@selector(clearCachedImages)];
     }
@@ -67,18 +78,6 @@ struct SBIconImageInfo {
     if ([self respondsToSelector:@selector(iconImageDidUpdate:)]) {
         [self performSelector:@selector(iconImageDidUpdate:) withObject:nil];
     }
-    if ([self respondsToSelector:@selector(updateImageAnimated:)]) {
-        NSMethodSignature *sig = [self methodSignatureForSelector:@selector(updateImageAnimated:)];
-        if (sig) {
-            NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
-            BOOL animated = NO;
-            [inv setSelector:@selector(updateImageAnimated:)];
-            [inv setTarget:self];
-            [inv setArgument:&animated atIndex:2];
-            [inv invoke];
-        }
-    }
-
     [self setNeedsDisplay];
     [self setNeedsLayout];
 }
@@ -90,7 +89,7 @@ struct SBIconImageInfo {
     }
 }
 
-// 【精细化修复1】：智能判断是否允许手势共存，解决多插件重叠触发
+// 解决手势冲突
 %new
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
     if (gestureRecognizer == self.adSwipeGestureRecognizer) {
@@ -103,7 +102,6 @@ struct SBIconImageInfo {
     return NO;
 }
 
-// 【精细化修复2】：抢占优先级，强行让其他插件的上滑手势失效
 %new
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
     if (gestureRecognizer == self.adSwipeGestureRecognizer) {
@@ -117,7 +115,30 @@ struct SBIconImageInfo {
     return NO;
 }
 
-%end
+
+// ==========================================
+// 核心：替换桌面静止状态显示的图标
+// ==========================================
+- (UIImage *)contentsImage {
+    UIImage *custom = ADGetCustomIconImage(self.icon);
+    if (custom) return custom;
+    return %orig;
+}
+
+- (UIImage *)displayedImage {
+    UIImage *custom = ADGetCustomIconImage(self.icon);
+    if (custom) return custom;
+    return %orig;
+}
+
+- (UIImage *)image {
+    UIImage *custom = ADGetCustomIconImage(self.icon);
+    if (custom) return custom;
+    return %orig;
+}
+
+%end // SBIconImageView
+
 
 #pragma mark - Custom App Icon Name
 
@@ -134,55 +155,26 @@ struct SBIconImageInfo {
 %end
 
 
-#pragma mark - Custom Icon Replacement (SBIcon)
+// ==========================================
+// 终极修复：解决打开/关闭 App 动画闪回原版的问题
+// ==========================================
+%hook SBHIconImageCache
 
-%hook SBIcon
-
-// iOS 14-16 生成图标核心方法，解决打开/关闭 App 瞬间图标闪回原版的问题
-- (UIImage *)generateIconImageWithInfo:(struct SBIconImageInfo)info {
-    NSString *bundleID = nil;
-    if ([self respondsToSelector:@selector(applicationBundleIdentifier)]) {
-        bundleID = [self performSelector:@selector(applicationBundleIdentifier)];
-    } else if ([self respondsToSelector:@selector(applicationBundleID)]) {
-        bundleID = [self performSelector:@selector(applicationBundleID)];
-    }
-    
-    if (bundleID) {
-        NSString *customPath = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
-        if ([[NSFileManager defaultManager] fileExistsAtPath:customPath]) {
-            UIImage *customImage = [UIImage imageWithContentsOfFile:customPath];
-            if (customImage) {
-                return customImage;
-            }
-        }
-    }
+- (UIImage *)imageForIcon:(SBIcon *)icon {
+    UIImage *custom = ADGetCustomIconImage(icon);
+    if (custom) return custom;
     return %orig;
 }
 
-// 补充拦截缓存图像
-- (UIImage *)unmaskedIconImageWithInfo:(struct SBIconImageInfo)info {
-    NSString *bundleID = nil;
-    if ([self respondsToSelector:@selector(applicationBundleIdentifier)]) {
-        bundleID = [self performSelector:@selector(applicationBundleIdentifier)];
-    } else if ([self respondsToSelector:@selector(applicationBundleID)]) {
-        bundleID = [self performSelector:@selector(applicationBundleID)];
-    }
-    
-    if (bundleID) {
-        NSString *customPath = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
-        if ([[NSFileManager defaultManager] fileExistsAtPath:customPath]) {
-            UIImage *customImage = [UIImage imageWithContentsOfFile:customPath];
-            if (customImage) {
-                return customImage;
-            }
-        }
-    }
+- (UIImage *)unmaskedImageForIcon:(SBIcon *)icon {
+    UIImage *custom = ADGetCustomIconImage(icon);
+    if (custom) return custom;
     return %orig;
 }
 
-%end
+%end // SBHIconImageCache
 
-%end // 结束 SHARED_HOOKS
+%end // SHARED_HOOKS
 
 
 #pragma mark - ForceTouch Menu
@@ -205,7 +197,6 @@ struct SBIconImageInfo {
 }
 
 + (void)activateShortcut:(SBSApplicationShortcutItem *)item withBundleIdentifier:(NSString *)bundleID forIconView:(SBIconView *)iconView {
-    NSLog(@"[AppData]: iconView: %@",iconView);
     if ([item.type isEqualToString:kSBApplicationShortcutItemType]) {
         [ADDataViewController presentControllerFromSBIconView:iconView fromContextMenu:YES];
     } else {
@@ -246,7 +237,7 @@ struct SBIconImageInfo {
 
 %end
 
-%end
+%end // IOS13_AND_NEWER_HOOKS
 
 
 %group IOS12_AND_OLDER_HOOKS
@@ -284,13 +275,11 @@ struct SBIconImageInfo {
 
 %end
 
-%end
+%end // IOS12_AND_OLDER_HOOKS
 
 
 %ctor {
-    // 初始化统用 Hook 分组
     %init(SHARED_HOOKS);
-    
     if (@available(iOS 13, *)) {
         %init(IOS13_AND_NEWER_HOOKS);
     } else {
