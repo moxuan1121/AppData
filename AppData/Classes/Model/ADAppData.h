@@ -24,6 +24,7 @@
 @property (nonatomic, strong) NSString *bundleIdentifier;
 
 @property (nonatomic, assign) BOOL appStoreVendable;
+@property (nonatomic, assign) BOOL isDeletable;
 
 @property (nonatomic, strong) NSURL *bundleURL;
 @property (nonatomic, strong) NSURL *dataContainerURL;
@@ -44,7 +45,6 @@
 @property (nonatomic, strong) NSArray <NSString *> *backgroundModes;
 
 + (ADAppData *)appDataForBundleIdentifier:(NSString *)bundleIdentifier iconImage:(UIImage *)iconImage;
-
 - (BOOL)isApplication;
 
 #pragma mark - Icon Name
@@ -56,7 +56,6 @@
 
 - (BOOL)hasAppStoreApp;
 - (void)openInAppStore;
-
 #pragma mark - Permissions
 
 - (NSArray <NSDictionary *> *)getPermissions;
@@ -65,7 +64,6 @@
 #pragma mark - Reset App
 - (void)getAppUsageDirectorySizeWithCompletion:(void(^)(NSString *formattedSize))completion;
 - (void)resetDiskContentWithCompletion:(void(^)())completion;
-
 #pragma mark - Caches
 
 - (void)getCachesDirectorySizeWithCompletion:(void(^)(NSString *formattedSize))completion;
@@ -75,9 +73,8 @@
 
 - (void)setAppBadgeCount:(NSInteger)badgeCount;
 - (NSInteger)appBadgeCount;
+#pragma mark - Uninstall App
 
-#pragma mark Offload App
-
-- (void)offloadAppWithCompletion:(void(^)())completion;
+- (void)uninstallAppWithCompletion:(void(^)(BOOL success))completion;
 
 @end
