@@ -11,10 +11,13 @@ struct SBIconImageInfo {
     CGFloat continuousCornerRadius;
 };
 
-@interface SBLeafIcon : NSObject
+@interface SBIcon : NSObject
 - (NSString *)applicationBundleID;
+- (NSString *)applicationBundleIdentifier;
 @end
 
+@interface SBLeafIcon : SBIcon
+@end
 
 %group SHARED_HOOKS
 
@@ -135,30 +138,50 @@ struct SBIconImageInfo {
 %end
 
 
-#pragma mark - Custom Icon Replacement (SBLeafIcon)
+#pragma mark - Custom Icon Replacement (SBIcon)
 
-%hook SBLeafIcon
+// 【修复编译报错】：将 SBIcon 这个 Hook 移到了 SHARED_HOOKS 分组内
+%hook SBIcon
 
+// iOS 14-16 生成图标核心方法，解决打开/关闭 App 瞬间图标闪回原版的问题
 - (UIImage *)generateIconImageWithInfo:(struct SBIconImageInfo)info {
-    NSString *bundleID = [self applicationBundleID];
-    if (bundleID && [bundleID isKindOfClass:[NSString class]]) {
-        NSString *customIconPath = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
-        
-        if ([[NSFileManager defaultManager] fileExistsAtPath:customIconPath]) {
-            UIImage *customImage = [UIImage imageWithContentsOfFile:customIconPath];
+    NSString *bundleID = nil;
+    if ([self respondsToSelector:@selector(applicationBundleIdentifier)]) {
+        bundleID = [self performSelector:@selector(applicationBundleIdentifier)];
+    } else if ([self respondsToSelector:@selector(applicationBundleID)]) {
+        bundleID = [self performSelector:@selector(applicationBundleID)];
+    }
+    
+    if (bundleID) {
+        NSString *customPath = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:customPath]) {
+            UIImage *customImage = [UIImage imageWithContentsOfFile:customPath];
             if (customImage) {
-                UIGraphicsBeginImageContextWithOptions(info.size, NO, info.scale);
-                UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(0, 0, info.size.width, info.size.height) cornerRadius:info.continuousCornerRadius];
-                [path addClip];
-                [customImage drawInRect:CGRectMake(0, 0, info.size.width, info.size.height)];
-                UIImage *finalIcon = UIGraphicsGetImageFromCurrentImageContext();
-                UIGraphicsEndImageContext();
-                
-                return finalIcon;
+                return customImage;
             }
         }
     }
+    return %orig;
+}
+
+// 补充拦截缓存图像
+- (UIImage *)unmaskedIconImageWithInfo:(struct SBIconImageInfo)info {
+    NSString *bundleID = nil;
+    if ([self respondsToSelector:@selector(applicationBundleIdentifier)]) {
+        bundleID = [self performSelector:@selector(applicationBundleIdentifier)];
+    } else if ([self respondsToSelector:@selector(applicationBundleID)]) {
+        bundleID = [self performSelector:@selector(applicationBundleID)];
+    }
     
+    if (bundleID) {
+        NSString *customPath = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:customPath]) {
+            UIImage *customImage = [UIImage imageWithContentsOfFile:customPath];
+            if (customImage) {
+                return customImage;
+            }
+        }
+    }
     return %orig;
 }
 
@@ -269,57 +292,10 @@ struct SBIconImageInfo {
 %end
 
 
-#pragma mark - Additional Icon Cache Hook (iOS 14-16)
-
-%hook SBIcon
-
-// iOS 14-16 生成图标核心方法，解决打开/关闭 App 瞬间图标闪回原版的问题
-- (UIImage *)generateIconImageWithInfo:(struct SBIconImageInfo)info {
-    NSString *bundleID = nil;
-    if ([self respondsToSelector:@selector(applicationBundleIdentifier)]) {
-        bundleID = [self performSelector:@selector(applicationBundleIdentifier)];
-    } else if ([self respondsToSelector:@selector(applicationBundleID)]) {
-        bundleID = [self performSelector:@selector(applicationBundleID)];
-    }
-    
-    if (bundleID) {
-        NSString *customPath = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
-        if ([[NSFileManager defaultManager] fileExistsAtPath:customPath]) {
-            UIImage *customImage = [UIImage imageWithContentsOfFile:customPath];
-            if (customImage) {
-                return customImage;
-            }
-        }
-    }
-    return %orig;
-}
-
-// 补充拦截缓存图像
-- (UIImage *)unmaskedIconImageWithInfo:(struct SBIconImageInfo)info {
-    NSString *bundleID = nil;
-    if ([self respondsToSelector:@selector(applicationBundleIdentifier)]) {
-        bundleID = [self performSelector:@selector(applicationBundleIdentifier)];
-    } else if ([self respondsToSelector:@selector(applicationBundleID)]) {
-        bundleID = [self performSelector:@selector(applicationBundleID)];
-    }
-    
-    if (bundleID) {
-        NSString *customPath = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
-        if ([[NSFileManager defaultManager] fileExistsAtPath:customPath]) {
-            UIImage *customImage = [UIImage imageWithContentsOfFile:customPath];
-            if (customImage) {
-                return customImage;
-            }
-        }
-    }
-    return %orig;
-}
-
-%end
-
-
 %ctor {
+    // 初始化统用 Hook 分组
     %init(SHARED_HOOKS);
+    
     if (@available(iOS 13, *)) {
         %init(IOS13_AND_NEWER_HOOKS);
     } else {
