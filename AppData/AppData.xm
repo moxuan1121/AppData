@@ -23,7 +23,7 @@
         self.adSwipeGestureRecognizer = [[UISwipeGestureRecognizer alloc] initWithTarget:r action:@selector(appDataDidSwipeUp:)];
         self.adSwipeGestureRecognizer.direction = (UISwipeGestureRecognizerDirectionUp);
         
-        // 【关键修复】：设置代理，允许手势共存
+        // 【关键修复】：设置代理，允许手势共存与干预
         self.adSwipeGestureRecognizer.delegate = (id<UIGestureRecognizerDelegate>)r;
         
         r.userInteractionEnabled = YES;
@@ -54,11 +54,37 @@
     }
 }
 
-// 【关键修复】：允许上滑手势与 iOS 15/16+ 原生桌面手势（如长按/滑动列表）共存
+// 【精细化修复1】：智能判断是否允许手势共存，解决多插件重叠触发
 %new
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
     if (gestureRecognizer == self.adSwipeGestureRecognizer) {
+        // 如果另一个手势也是 UISwipeGestureRecognizer 或 UIScreenEdgePanGestureRecognizer
+        // 100% 是其他插件注入的手势（iOS原生图标交互不使用Swipe）。
+        // 我们返回 NO，拒绝同时触发，避免两个插件（如Dock类插件）弹窗重叠。
+        if ([otherGestureRecognizer isKindOfClass:[UISwipeGestureRecognizer class]] || 
+            [otherGestureRecognizer isKindOfClass:[UIScreenEdgePanGestureRecognizer class]]) {
+            return NO;
+        }
+        
+        // 否则（通常是系统原生的长按 UILongPressGestureRecognizer 或滚动 UIPanGestureRecognizer）
+        // 返回 YES，防止 iOS 15/16+ 系统原生手势直接把我们屏蔽掉
         return YES;
+    }
+    return NO;
+}
+
+// 【精细化修复2】：抢占优先级，强行让其他插件的上滑手势失效
+%new
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
+    if (gestureRecognizer == self.adSwipeGestureRecognizer) {
+        // 当我们识别到上滑时，强行要求其他插件的 Swipe 手势判定为失败
+        if ([otherGestureRecognizer isKindOfClass:[UISwipeGestureRecognizer class]]) {
+            UISwipeGestureRecognizer *otherSwipe = (UISwipeGestureRecognizer *)otherGestureRecognizer;
+            // 如果别的插件也是上滑，直接让它失效，保证只触发 AppData
+            if (otherSwipe.direction == UISwipeGestureRecognizerDirectionUp) {
+                return YES;
+            }
+        }
     }
     return NO;
 }
