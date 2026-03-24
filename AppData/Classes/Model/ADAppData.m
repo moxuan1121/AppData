@@ -291,7 +291,7 @@
 
 - (void)_resetAllAppPermissions {
     // 使用适配了 iOS 15+ 的 TCC 接口进行重置
-    TCCAccessResetForBundleIdentifier(kTCCServiceAll, self.bundleIdentifier);
+    TCCAccessResetForBundleIdentifier(@"kTCCServiceAll", self.bundleIdentifier);
     
     // Reset location permission
     [CLLocationManager setAuthorizationStatusByType:kCLAuthorizationStatusNotDetermined forBundleIdentifier:self.bundleIdentifier];
