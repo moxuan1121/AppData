@@ -98,8 +98,9 @@
                 [actionsBar.bottomAnchor constraintEqualToAnchor:cell.contentView.bottomAnchor].active = YES;
                 __weak ADActionsBarView *weakActionsBar = actionsBar;
                 
+                // 【修改点：去掉了 \n，单行显示标题】
                 // 1. Update Badge
-                [actionsBar addItemWithTitle:@"修改\n角标"
+                [actionsBar addItemWithTitle:@"修改角标"
                                       detail:[NSString stringWithFormat:@"%td",[self.appData appBadgeCount]]
                                        image:[ADHelper imageNamed:@"ClearBadge"]
                                      handler:^{
@@ -144,7 +145,7 @@
                 }];
                 
                 // 2. Clear Caches
-                [actionsBar addItemWithTitle:@"清理\n缓存"
+                [actionsBar addItemWithTitle:@"清理缓存"
                                       detail:@"计算中..."
                                        image:[ADHelper imageNamed:@"ClearCache"]
                                      handler:^{
@@ -166,7 +167,7 @@
                 }];
                 
                 // 3. Clear App Data
-                [actionsBar addItemWithTitle:@"清理\n数据"
+                [actionsBar addItemWithTitle:@"清理数据"
                                       detail:@"计算中..."
                                        image:[ADHelper imageNamed:@"ClearData"]
                                      handler:^{
@@ -192,7 +193,7 @@
                 }];
                 
                 // 4. Reset Permissions
-                [actionsBar addItemWithTitle:@"重置\n权限"
+                [actionsBar addItemWithTitle:@"重置权限"
                                       detail:[NSString stringWithFormat:@"%td",[self.appData getPermissions].count]
                                        image:[ADHelper imageNamed:@"ResetPermissions"]
                                      handler:^{
@@ -210,9 +211,9 @@
                     }
                 }];
                 
-                // 5. Uninstall App (加入"彻底删除"小字)
-                [actionsBar addItemWithTitle:@"卸载\n应用"
-                                      detail:@"彻底删除"
+                // 5. Uninstall App (小字改为"彻底卸载")
+                [actionsBar addItemWithTitle:@"卸载应用"
+                                      detail:@"彻底卸载"
                                        image:[ADHelper imageNamed:@"OffloadApp"]
                                      handler:^{
                     if (self.appData.isDeletable) {
