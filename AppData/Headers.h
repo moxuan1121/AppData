@@ -10,7 +10,6 @@
 #import <CoreLocation/CoreLocation.h>
 
 // UIKit
-
 @interface UIImage ()
 + (id)imageNamed:(id)arg1 inBundle:(id)arg2;
 @end
@@ -19,9 +18,7 @@
 - (UIViewController *)_viewControllerForAncestor;
 @end
 
-
 // Core Services
-
 @interface LSResourceProxy : NSObject
 @end
 
@@ -55,15 +52,12 @@
 @property (nonatomic,readonly) NSNumber * ODRDiskUsage;
 @property (getter=isAppStoreVendable,nonatomic,readonly) BOOL appStoreVendable;
 @property (getter=isDeletable,nonatomic,readonly) BOOL deletable;
-
 // iOS 13
 @property (nonatomic,readonly) NSSet *claimedDocumentContentTypes;
 @property (nonatomic,readonly) NSSet *claimedURLSchemes;
 @end
 
-
 // SpringBoard
-
 @interface SBApplicationInfo : NSObject
 - (NSURL *)dataContainerURL;
 @end
@@ -72,8 +66,8 @@
 @property (nonatomic, retain) SBApplicationInfo * info;
 @property (nonatomic,readonly) NSString * displayName;
 -(void)purgeCaches;
-@property (nonatomic,copy) id badgeValue; // iOS 12 and newer
-@property (assign,nonatomic) id badgeNumberOrString; // iOS 11 and older
+@property (nonatomic,copy) id badgeValue; 
+@property (assign,nonatomic) id badgeNumberOrString; 
 - (NSString *)bundleIdentifier;
 @end
 
@@ -84,6 +78,7 @@
 
 @interface SBIcon : NSObject
 - (NSString *)applicationBundleID;
+- (NSString *)applicationBundleIdentifier; // iOS 15+ 兼容
 - (SBApplication *)application;
 - (NSInteger)badgeValue;
 @end
@@ -95,6 +90,7 @@
 @property (nonatomic, retain) SBIcon *icon;
 @property (nonatomic, retain) SBFolderIcon * folderIcon;
 - (id)_iconImageView;
+- (id)iconImageView; // iOS 15+ 兼容
 - (void)_updateLabel;
 - (BOOL)ad_isSupportedIcon;
 @end
@@ -117,7 +113,6 @@
 - (UIImage *)contentsImage;
 - (void)appDataPreferencesChanged;
 @end
-
 
 @interface SBFloatingDockViewController : UIViewController
 @end
@@ -144,13 +139,11 @@
 @end
 
 //CoreLocation
-
 @interface CLLocationManager ()
 + (void)setAuthorizationStatusByType:(CLAuthorizationStatus)arg2 forBundleIdentifier:(NSString *)arg3;
 @end
 
 //Offloading
-
 @interface IXAppInstallCoordinator : NSObject
 +(BOOL)demoteAppToPlaceholderWithBundleID:(id)arg1 forReason:(unsigned long long)arg2 waitForDeletion:(BOOL)arg3 error:(id*)arg4 ;
 +(BOOL)demoteAppToPlaceholderWithBundleID:(id)arg1 forReason:(unsigned long long)arg2 error:(id*)arg3 ;
