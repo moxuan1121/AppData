@@ -18,6 +18,157 @@ struct SBIconImageInfo {
 
 %group SHARED_HOOKS
 
+#pragma mark - Helpers
+
+static inline NSString *ADCustomIconPathForBundleID(NSString *bundleID) {
+    if (!bundleID || ![bundleID isKindOfClass:[NSString class]] || bundleID.length == 0) return nil;
+    return [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
+}
+
+static inline UIImage *ADLoadCustomIcon(NSString *bundleID) {
+    NSString *path = ADCustomIconPathForBundleID(bundleID);
+    if (!path) return nil;
+    if (![[NSFileManager defaultManager] fileExistsAtPath:path]) return nil;
+    return [UIImage imageWithContentsOfFile:path];
+}
+
+static inline NSString *ADBundleIDFromIconImageView(id iconImageView) {
+    if (!iconImageView) return nil;
+
+    id icon = nil;
+
+    if ([iconImageView respondsToSelector:@selector(icon)]) {
+        icon = [iconImageView performSelector:@selector(icon)];
+    }
+
+    if (!icon && [iconImageView respondsToSelector:@selector(iconView)]) {
+        id iconView = [iconImageView performSelector:@selector(iconView)];
+        if (iconView && [iconView respondsToSelector:@selector(icon)]) {
+            icon = [iconView performSelector:@selector(icon)];
+        }
+    }
+
+    if (!icon) return nil;
+
+    if ([icon respondsToSelector:@selector(applicationBundleIdentifier)]) {
+        NSString *bundleID = [icon performSelector:@selector(applicationBundleIdentifier)];
+        if (bundleID.length) return bundleID;
+    }
+
+    if ([icon respondsToSelector:@selector(applicationBundleID)]) {
+        NSString *bundleID = [icon performSelector:@selector(applicationBundleID)];
+        if (bundleID.length) return bundleID;
+    }
+
+    return nil;
+}
+
+static inline UIImage *ADRenderedCustomIconForImageView(id iconImageView) {
+    NSString *bundleID = ADBundleIDFromIconImageView(iconImageView);
+    UIImage *customImage = ADLoadCustomIcon(bundleID);
+    if (!customImage) return nil;
+
+    CGSize targetSize = CGSizeZero;
+    CGFloat targetScale = [UIScreen mainScreen].scale;
+    CGFloat targetCornerRadius = 0.0;
+
+    if ([iconImageView respondsToSelector:@selector(iconImageInfo)]) {
+        NSMethodSignature *sig = [iconImageView methodSignatureForSelector:@selector(iconImageInfo)];
+        if (sig) {
+            NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+            [inv setSelector:@selector(iconImageInfo)];
+            [inv setTarget:iconImageView];
+            [inv invoke];
+
+            struct SBIconImageInfo info;
+            [inv getReturnValue:&info];
+            targetSize = info.size;
+            targetScale = info.scale > 0.0 ? info.scale : targetScale;
+            targetCornerRadius = info.continuousCornerRadius;
+        }
+    }
+
+    if (CGSizeEqualToSize(targetSize, CGSizeZero)) {
+        if ([iconImageView bounds].size.width > 0.0 && [iconImageView bounds].size.height > 0.0) {
+            targetSize = [iconImageView bounds].size;
+        } else {
+            targetSize = CGSizeMake(60.0, 60.0);
+        }
+    }
+
+    if (targetCornerRadius <= 0.0 && [iconImageView respondsToSelector:@selector(continuousCornerRadius)]) {
+        NSMethodSignature *sig = [iconImageView methodSignatureForSelector:@selector(continuousCornerRadius)];
+        if (sig) {
+            NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+            [inv setSelector:@selector(continuousCornerRadius)];
+            [inv setTarget:iconImageView];
+            [inv invoke];
+            [inv getReturnValue:&targetCornerRadius];
+        }
+    }
+
+    if (targetCornerRadius <= 0.0) {
+        targetCornerRadius = round(MIN(targetSize.width, targetSize.height) * 0.224f);
+    }
+
+    UIGraphicsBeginImageContextWithOptions(targetSize, NO, targetScale);
+    UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(0, 0, targetSize.width, targetSize.height)
+                                                    cornerRadius:targetCornerRadius];
+    [path addClip];
+    [customImage drawInRect:CGRectMake(0, 0, targetSize.width, targetSize.height)];
+    UIImage *finalIcon = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+
+    return finalIcon ?: customImage;
+}
+
+static inline void ADSetShowsSquareCornersIfPossible(id iconImageView, BOOL showsSquareCorners) {
+    SEL sel = @selector(setShowsSquareCorners:);
+    if ([iconImageView respondsToSelector:sel]) {
+        NSMethodSignature *sig = [iconImageView methodSignatureForSelector:sel];
+        if (sig) {
+            NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+            [inv setSelector:sel];
+            [inv setTarget:iconImageView];
+            [inv setArgument:&showsSquareCorners atIndex:2];
+            [inv invoke];
+        }
+    }
+}
+
+static inline void ADHardRefreshIconImageView(id iconImageView) {
+    if (!iconImageView) return;
+
+    ADSetShowsSquareCornersIfPossible(iconImageView, NO);
+
+    if ([iconImageView respondsToSelector:@selector(clearCachedImages)]) {
+        [iconImageView performSelector:@selector(clearCachedImages)];
+    }
+    if ([iconImageView respondsToSelector:@selector(clearIconImageInfo)]) {
+        [iconImageView performSelector:@selector(clearIconImageInfo)];
+    }
+    if ([iconImageView respondsToSelector:@selector(iconImageDidUpdate:)]) {
+        [iconImageView performSelector:@selector(iconImageDidUpdate:) withObject:nil];
+    }
+    if ([iconImageView respondsToSelector:@selector(updateImageAnimated:)]) {
+        NSMethodSignature *sig = [iconImageView methodSignatureForSelector:@selector(updateImageAnimated:)];
+        if (sig) {
+            NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+            BOOL animated = NO;
+            [inv setSelector:@selector(updateImageAnimated:)];
+            [inv setTarget:iconImageView];
+            [inv setArgument:&animated atIndex:2];
+            [inv invoke];
+        }
+    }
+
+    [iconImageView setNeedsDisplay];
+    [iconImageView setNeedsLayout];
+    if ([iconImageView respondsToSelector:@selector(layoutIfNeeded)]) {
+        [iconImageView layoutIfNeeded];
+    }
+}
+
 #pragma mark - Swipe Up on Icon
 
 %hook SBIconImageView
@@ -46,6 +197,40 @@ struct SBIconImageInfo {
     return r;
 }
 
+// 新增：显示层直接取图时，也优先返回自定义图
+- (UIImage *)contentsImage {
+    UIImage *custom = ADRenderedCustomIconForImageView(self);
+    if (custom) {
+        ADSetShowsSquareCornersIfPossible(self, NO);
+        return custom;
+    }
+    return %orig;
+}
+
+// 新增：系统重新给 imageView 绑定 icon 的瞬间，也强制失效旧缓存
+- (void)setIcon:(id)icon location:(id)location animated:(BOOL)animated {
+    %orig;
+    if (ADBundleIDFromIconImageView(self)) {
+        [self appDataPreferencesChanged];
+    }
+}
+
+// 新增：异步图标加载结束时，系统可能把原图塞回来，这里再压一次自定义图
+- (void)didEndAsynchronousImageLoadForIcon:(id)icon {
+    %orig;
+    if (ADBundleIDFromIconImageView(self)) {
+        [self appDataPreferencesChanged];
+    }
+}
+
+// 新增：icon cache 更新时，系统也可能回写原图，这里再次覆盖
+- (void)iconImageCache:(id)cache didUpdateImageForIcon:(id)icon {
+    %orig;
+    if (ADBundleIDFromIconImageView(self)) {
+        [self appDataPreferencesChanged];
+    }
+}
+
 %new
 - (void)appDataPreferencesChanged {
     if ([ADSettings swipeUpEnabled]) {
@@ -58,30 +243,8 @@ struct SBIconImageInfo {
         }
     }
 
-    // 新增：同时把图标缓存/显示也刷新掉
-    if ([self respondsToSelector:@selector(clearCachedImages)]) {
-        [self performSelector:@selector(clearCachedImages)];
-    }
-    if ([self respondsToSelector:@selector(clearIconImageInfo)]) {
-        [self performSelector:@selector(clearIconImageInfo)];
-    }
-    if ([self respondsToSelector:@selector(iconImageDidUpdate:)]) {
-        [self performSelector:@selector(iconImageDidUpdate:) withObject:nil];
-    }
-    if ([self respondsToSelector:@selector(updateImageAnimated:)]) {
-        NSMethodSignature *sig = [self methodSignatureForSelector:@selector(updateImageAnimated:)];
-        if (sig) {
-            NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
-            BOOL animated = NO;
-            [inv setSelector:@selector(updateImageAnimated:)];
-            [inv setTarget:self];
-            [inv setArgument:&animated atIndex:2];
-            [inv invoke];
-        }
-    }
-
-    [self setNeedsDisplay];
-    [self setNeedsLayout];
+    // 更彻底：同时处理缓存、角、异步回写、显示刷新
+    ADHardRefreshIconImageView(self);
 }
 
 %new
