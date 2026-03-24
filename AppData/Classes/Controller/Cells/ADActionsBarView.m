@@ -54,26 +54,20 @@
     // 【修改点2】：锁定统一大小 28x28，居中对齐
     [view.actionImageView.topAnchor constraintEqualToAnchor:view.topAnchor constant:10].active = YES;
     [view.actionImageView.centerXAnchor constraintEqualToAnchor:view.centerXAnchor].active = YES;
-    [view.actionImageView.widthAnchor constraintEqualToConstant:28].active = YES;
-    [view.actionImageView.heightAnchor constraintEqualToConstant:28].active = YES;
+    [view.actionImageView.widthAnchor constraintEqualToConstant:36].active = YES;
+    [view.actionImageView.heightAnchor constraintEqualToConstant:36].active = YES;
 
-    UIView *activityContainerView = [[UIView alloc] init];
-    activityContainerView.userInteractionEnabled = NO;
-    activityContainerView.translatesAutoresizingMaskIntoConstraints = NO;
-    [view addSubview:activityContainerView];
-    [activityContainerView.topAnchor constraintEqualToAnchor:view.actionImageView.topAnchor].active = YES;
-    [activityContainerView.leadingAnchor constraintEqualToAnchor:view.actionImageView.leadingAnchor].active = YES;
-    [activityContainerView.widthAnchor constraintEqualToAnchor:view.actionImageView.widthAnchor].active = YES;
-    [activityContainerView.heightAnchor constraintEqualToAnchor:view.actionImageView.heightAnchor].active = YES;
-    
+    // 【修复点：找回加载动画】直接把加载动画贴在图标正中心，去除多余的容器避免约束冲突
     view.activityIndicatorView = [ADAppearance.sharedInstance activityIndicatorView];
     view.activityIndicatorView.userInteractionEnabled = NO;
     view.activityIndicatorView.translatesAutoresizingMaskIntoConstraints = NO;
     [view.activityIndicatorView hidesWhenStopped];
     [view.activityIndicatorView stopAnimating];
-    [activityContainerView addSubview:view.activityIndicatorView];
-    [view.activityIndicatorView.centerXAnchor constraintEqualToAnchor:activityContainerView.centerXAnchor].active = YES;
-    [view.activityIndicatorView.centerYAnchor constraintEqualToAnchor:activityContainerView.centerYAnchor].active = YES;
+    [view addSubview:view.activityIndicatorView];
+    
+    // 约束动画绝对居中对齐到图标的中心点
+    [view.activityIndicatorView.centerXAnchor constraintEqualToAnchor:view.actionImageView.centerXAnchor].active = YES;
+    [view.activityIndicatorView.centerYAnchor constraintEqualToAnchor:view.actionImageView.centerYAnchor].active = YES;
 
     view.nameLabel = [[UILabel alloc] init];
     view.nameLabel.tag = 2;
