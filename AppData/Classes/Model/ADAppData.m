@@ -70,6 +70,13 @@
         self.appStoreVendable = self.appProxy.isAppStoreVendable;
     }
     
+    // Deletable
+    if ([self.appProxy respondsToSelector:@selector(isDeletable)]) {
+        self.isDeletable = self.appProxy.isDeletable;
+    } else {
+        self.isDeletable = YES;
+    }
+    
     // Bundle URL
     if ([self.appProxy respondsToSelector:@selector(bundleURL)]) {
         if (self.appProxy.bundleURL) {
@@ -109,7 +116,6 @@
     // Other Info
     self.entitlements = self.appProxy.entitlements;
     self.entitlementsIdentifiers = self.entitlements.allKeys;
-    
     ASYNC({
         NSURL *infoPlistURL = [self.bundleURL URLByAppendingPathComponent:@"Info.plist"];
         NSDictionary *infoDictionary = [NSDictionary dictionaryWithContentsOfURL:infoPlistURL];
@@ -118,10 +124,12 @@
             // URL Schemes
             NSArray *bundleURLTypes = [infoDictionary objectForKey:@"CFBundleURLTypes"];
             if ([bundleURLTypes isKindOfClass:[NSArray class]]) {
+            
                 if (bundleURLTypes.firstObject && [bundleURLTypes.firstObject isKindOfClass:[NSDictionary class]]) {
                     id urlSchemes = [bundleURLTypes.firstObject objectForKey:@"CFBundleURLSchemes"];
                     if ([urlSchemes isKindOfClass:[NSArray class]]) {
                         self.urlSchemes = urlSchemes;
+                
                     }
                 }
             }
@@ -129,6 +137,7 @@
             // Queries Schemes
             id queriesSchemes = [infoDictionary objectForKey:@"LSApplicationQueriesSchemes"];
             if ([queriesSchemes isKindOfClass:[NSArray class]]) {
+          
                 self.queriesSchemes = queriesSchemes;
             }
             
@@ -214,6 +223,7 @@
         for (NSURL *url in cacheDirectoriesURLs) {
             if (url && [[NSFileManager defaultManager] fileExistsAtPath:url.path]) {
                 unsigned long long int folderSize = 0;
+          
                 [[NSFileManager defaultManager] nr_getAllocatedSize:&folderSize ofDirectoryAtURL:url error:nil];
                 totalSize += folderSize;
             }
@@ -281,7 +291,6 @@
 
 - (void)resetAllAppPermissions {
     SBSApplicationTerminationAssertionRef assertion = SBSApplicationTerminationAssertionCreateWithError(NULL, self.bundleIdentifier, 1, NULL);
-    
     [self _resetAllAppPermissions];
     
     if (assertion) {
@@ -334,13 +343,6 @@
 }
 
 - (void)getAppUsageDirectorySizeWithCompletion:(void(^)(NSString *formattedSize))completion {
-//    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-//        unsigned long long int dynamicSize = [[LSApplicationProxy applicationProxyForIdentifier:self.bundleIdentifier].dynamicDiskUsage unsignedLongLongValue];
-//        NSString *formattedSize = [NSByteCountFormatter stringFromByteCount:dynamicSize countStyle:NSByteCountFormatterCountStyleFile];
-//        dispatch_async(dispatch_get_main_queue(), ^{
-//            completion(formattedSize);
-//        });
-//    });
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         unsigned long long int totalSize = 0;
         NSArray <NSURL *> *appUsageDirectoriesURLs = [self appUsageDirectoriesURLs];
@@ -373,7 +375,7 @@
         }
         
         // Reset all permissions
-        if (self.appStoreVendable) {
+        if (self.isApplication) {
             [self _resetAllAppPermissions];
         }
 
@@ -384,25 +386,29 @@
         dispatch_async(dispatch_get_main_queue(), ^{
             completion();
         });
-    });
+});
 }
 
-#pragma mark - Offload App
+#pragma mark - Uninstall App
 
-- (void)offloadAppWithCompletion:(void(^)())completion{
+- (void)uninstallAppWithCompletion:(void(^)(BOOL success))completion {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        if (@available(iOS 12.0, *)){
-            [NSClassFromString(@"IXAppInstallCoordinator") demoteAppToPlaceholderWithBundleID:self.bundleIdentifier forReason:1 waitForDeletion:YES completion:^{
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    completion();
-                });
-            }];
-        } else {
-            [NSClassFromString(@"IXAppInstallCoordinator") demoteAppToPlaceholderWithBundleID:self.bundleIdentifier forReason:1 error:nil];
-            dispatch_async(dispatch_get_main_queue(), ^{
-                completion();
-            });
+        BOOL result = NO;
+        id workspace = [NSClassFromString(@"LSApplicationWorkspace") performSelector:@selector(defaultWorkspace)];
+        
+        if ([workspace respondsToSelector:@selector(uninstallApplication:withOptions:error:)]) {
+            NSError *error = nil;
+            result = [workspace uninstallApplication:self.bundleIdentifier withOptions:nil error:&error];
+            if (error) {
+                NSLog(@"[AppData] Uninstall error: %@", error);
+            }
+        } else if ([workspace respondsToSelector:@selector(uninstallApplication:withOptions:)]) {
+            result = [workspace uninstallApplication:self.bundleIdentifier withOptions:nil];
         }
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (completion) completion(result);
+        });
     });
 }
 
