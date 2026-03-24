@@ -1,5 +1,5 @@
 //
-//  TCC.m
+//  ADTCC.m
 //  AppData
 //
 
@@ -21,10 +21,10 @@ static CFArrayRef (*TCCAccessCopyInformationForBundleId_Ptr)(CFStringRef);
 static int (*TCCAccessResetForBundle_Ptr)(NSString *, CFBundleRef);
 static CFArrayRef (*TCCAccessCopyInformationForBundle_Ptr)(CFBundleRef);
 
-int TCCAccessResetForBundleIdentifier(NSString *service, NSString *bundleIdentifier) {
+// 修改了函数名，增加 AD_ 前缀
+int AD_TCCAccessResetForBundleIdentifier(NSString *service, NSString *bundleIdentifier) {
     if (!bundleIdentifier) return 0;
 
-    // 优先：iOS 15+ 使用 tcc_identity_t
     if (tcc_identity_create_Ptr && TCCAccessReset_Ptr) {
         tcc_identity_t identity = tcc_identity_create_Ptr((__bridge CFStringRef)bundleIdentifier, 0);
         if (identity) {
@@ -32,12 +32,10 @@ int TCCAccessResetForBundleIdentifier(NSString *service, NSString *bundleIdentif
         }
     }
     
-    // 备用：尝试直接传入 BundleID
     if (TCCAccessResetForBundleId_Ptr) {
         return TCCAccessResetForBundleId_Ptr((__bridge CFStringRef)service, (__bridge CFStringRef)bundleIdentifier);
     }
 
-    // 兜底：降级为旧版 CFBundleRef 方式
     if (TCCAccessResetForBundle_Ptr) {
         Class lsAppProxyClass = NSClassFromString(@"LSApplicationProxy");
         if (lsAppProxyClass) {
@@ -59,23 +57,21 @@ int TCCAccessResetForBundleIdentifier(NSString *service, NSString *bundleIdentif
     return 0;
 }
 
-NSArray<NSDictionary *> *TCCAccessCopyInformationForBundleIdentifier(NSString *bundleIdentifier) {
+// 修改了函数名，增加 AD_ 前缀
+NSArray<NSDictionary *> *AD_TCCAccessCopyInformationForBundleIdentifier(NSString *bundleIdentifier) {
     if (!bundleIdentifier) return nil;
     
     CFArrayRef array = NULL;
 
-    // 优先：iOS 15+ 使用 tcc_identity_t
     if (tcc_identity_create_Ptr && TCCAccessCopyInformation_Ptr) {
         tcc_identity_t identity = tcc_identity_create_Ptr((__bridge CFStringRef)bundleIdentifier, 0);
         if (identity) {
             array = TCCAccessCopyInformation_Ptr(identity);
         }
     } 
-    // 备用：尝试直接传入 BundleID
     else if (TCCAccessCopyInformationForBundleId_Ptr) {
         array = TCCAccessCopyInformationForBundleId_Ptr((__bridge CFStringRef)bundleIdentifier);
     } 
-    // 兜底：降级为旧版 CFBundleRef 方式
     else if (TCCAccessCopyInformationForBundle_Ptr) {
         Class lsAppProxyClass = NSClassFromString(@"LSApplicationProxy");
         if (lsAppProxyClass) {
