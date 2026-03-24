@@ -13,6 +13,10 @@
 #import "ADMoreDataSource.h"
 #import <objc/runtime.h>
 
+#ifndef IS_IPAD
+#define IS_IPAD (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad)
+#endif
+
 @interface ADDataViewController () <UIGestureRecognizerDelegate>
 
 @property (nonatomic, strong) ADDataPresentationManager *presentationManager;
@@ -76,7 +80,6 @@
     } else if ([iconView respondsToSelector:@selector(_iconImageView)]) {
         _iconImageView = [iconView _iconImageView];
     } else {
-        // 修正了此处的 C 字符串语法错误
         _iconImageView = object_getIvar(iconView, class_getInstanceVariable(object_getClass(iconView), "_iconImageView"));
     }
     
@@ -233,7 +236,15 @@
 }
 
 - (void)configureViewWithAppData {
-    self.iconImageView.image = self.appData.iconImage;
+    // 初始化时，如果本地有自定义图标，则读取显示，否则显示原始图标
+    NSString *bundleID = self.appData.bundleIdentifier;
+    NSString *customPath = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:customPath]) {
+        self.iconImageView.image = [UIImage imageWithContentsOfFile:customPath];
+    } else {
+        self.iconImageView.image = self.appData.iconImage;
+    }
+    
     self.appStoreButton.hidden = ![self.appData hasAppStoreApp];
     
     if ([self.appData isApplication]) {
@@ -298,6 +309,13 @@
     
     self.iconImageView = [[UIImageView alloc] init];
     [self.iconImageView setTranslatesAutoresizingMaskIntoConstraints:NO];
+    
+    // =========== 新增代码：为图标添加点击手势 ===========
+    self.iconImageView.userInteractionEnabled = YES;
+    UITapGestureRecognizer *iconTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(didTapIconImageView:)];
+    [self.iconImageView addGestureRecognizer:iconTap];
+    // ===============================================
+
     [containerView addSubview:self.iconImageView];
     [self.iconImageView.leadingAnchor constraintEqualToAnchor:containerView.leadingAnchor constant:15].active = YES;
     [self.iconImageView.topAnchor constraintEqualToAnchor:containerView.topAnchor constant:15].active = YES;
@@ -396,8 +414,6 @@
     // Apply text colors
     UIColor *primaryLabelColor = [ADAppearance.sharedInstance primaryTextColor];
     UIColor *secondaryLabelsColor = [ADAppearance.sharedInstance secondaryTextColor];
-    // secondaryLabelsColor = [UIColor colorWithRed:0.922 green:0.922 blue:0.961 alpha:0.6];
-    // secondaryLabelsColor = [UIColor colorWithRed:0.235294 green:0.235294 blue:0.262745 alpha:0.65]; Light
 
     [self.nameLabel setTitleColor:primaryLabelColor forState:UIControlStateNormal];
     [self.identifierLabel setTitleColor:secondaryLabelsColor forState:UIControlStateNormal];
@@ -579,6 +595,97 @@
     UIAlertController *alertController = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
     [alertController addAction:[UIAlertAction actionWithTitle:cancelTitle style:UIAlertActionStyleCancel handler:nil]];
     [viewController?:[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:alertController animated:YES completion:nil];
+}
+
+
+#pragma mark - Custom Icon Replacement (新增功能模块)
+
+- (void)didTapIconImageView:(UITapGestureRecognizer *)gesture {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"更换桌面图标" message:@"选择一张图片替换当前App在桌面上的图标缓存（不修改原App文件）" preferredStyle:UIAlertControllerStyleActionSheet];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"从相册选择" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        UIImagePickerController *picker = [[UIImagePickerController alloc] init];
+        picker.delegate = self;
+        picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+        picker.allowsEditing = YES;
+        [self presentViewController:picker animated:YES completion:nil];
+    }]];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"恢复默认图标" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        [self resetCustomIcon];
+    }]];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+
+    if (IS_IPAD) {
+        alert.popoverPresentationController.sourceView = self.iconImageView;
+        alert.popoverPresentationController.sourceRect = self.iconImageView.bounds;
+    }
+
+    self.dockDismissed = [self.class dismissFloatingDockIfNeededWithCompletion:^{
+        [self presentViewController:alert animated:YES completion:nil];
+    }];
+}
+
+- (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<NSString *,id> *)info {
+    [picker dismissViewControllerAnimated:YES completion:nil];
+    UIImage *image = info[UIImagePickerControllerEditedImage] ? : info[UIImagePickerControllerOriginalImage];
+    if (image) {
+        [self saveCustomIcon:image];
+    }
+    if (self.dockDismissed && IS_IPAD) [self.class presentFloatingDockIfNeeded];
+}
+
+- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
+    [picker dismissViewControllerAnimated:YES completion:nil];
+    if (self.dockDismissed && IS_IPAD) [self.class presentFloatingDockIfNeeded];
+}
+
+- (void)saveCustomIcon:(UIImage *)image {
+    NSString *bundleID = self.appData.bundleIdentifier;
+    if (!bundleID) return;
+
+    NSString *dirPath = @"/var/mobile/Library/Preferences/AppDataIcons";
+    if (![[NSFileManager defaultManager] fileExistsAtPath:dirPath]) {
+        [[NSFileManager defaultManager] createDirectoryAtPath:dirPath withIntermediateDirectories:YES attributes:nil error:nil];
+    }
+    NSString *path = [dirPath stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.png", bundleID]];
+    [UIImagePNGRepresentation(image) writeToFile:path atomically:YES];
+
+    [self refreshSBIcon];
+}
+
+- (void)resetCustomIcon {
+    NSString *bundleID = self.appData.bundleIdentifier;
+    if (!bundleID) return;
+
+    NSString *path = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:path]) {
+        [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+    }
+
+    [self refreshSBIcon];
+}
+
+- (void)refreshSBIcon {
+    NSString *bundleID = self.appData.bundleIdentifier;
+    NSString *path = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
+    
+    // 1. 刷新当前 AppData 面板显示的图标
+    if ([[NSFileManager defaultManager] fileExistsAtPath:path]) {
+        self.iconImageView.image = [UIImage imageWithContentsOfFile:path];
+    } else {
+        self.iconImageView.image = self.appData.iconImage;
+    }
+
+    // 2. 核心：通知 SpringBoard 重绘该 App 图标缓存
+    if (self.appData.iconView && [self.appData.iconView respondsToSelector:@selector(icon)]) {
+        id sbIcon = [self.appData.iconView performSelector:@selector(icon)];
+        if ([sbIcon respondsToSelector:@selector(iconImageDidUpdate:)]) {
+            // 触发桌面更新
+            [sbIcon performSelector:@selector(iconImageDidUpdate:) withObject:nil];
+        }
+    }
 }
 
 @end
