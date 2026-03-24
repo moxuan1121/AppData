@@ -64,7 +64,6 @@
 #pragma mark - Used from Force Touch Menu
 
 + (void)presentControllerFromSBIconView:(SBIconView *)iconView fromContextMenu:(BOOL)contextMenu {
-    NSLog(@"[AppDataDebug] presentControllerFromSBIconView called with iconView: %@", iconView);
     if (!iconView) {
         [self showAlertWithTitle:@"AppData" message:[NSString stringWithFormat:@"Could not fetch app data.\n\nError: Empty icon view."]];
         return;
@@ -77,6 +76,7 @@
     } else if ([iconView respondsToSelector:@selector(_iconImageView)]) {
         _iconImageView = [iconView _iconImageView];
     } else {
+        // 修正了此处的 C 字符串语法错误
         _iconImageView = object_getIvar(iconView, class_getInstanceVariable(object_getClass(iconView), "_iconImageView"));
     }
     
@@ -90,22 +90,18 @@
     }
     
     if (!_iconImageView) {
-        NSLog(@"[AppDataDebug] ERROR: Could not find _iconImageView");
         [self showAlertWithTitle:@"AppData" message:[NSString stringWithFormat:@"Could not fetch app data.\n\nError: could not find icon image view."]];
         return;
     }
-    
-    NSLog(@"[AppDataDebug] Found _iconImageView: %@", _iconImageView);
     [self presentControllerFromSBIconImageView:_iconImageView iconView:iconView fromContextMenu:contextMenu];
 }
 
 #pragma mark - Used from Swipe Up
 
 + (void)presentControllerFromSBIconImageView:(SBIconImageView *)iconImageView fromContextMenu:(BOOL)contextMenu {
-    NSLog(@"[AppDataDebug] presentControllerFromSBIconImageView (SwipeUp wrapper) called");
     SBIconView *iconView = (SBIconView *)[iconImageView superview];
     if (![iconView respondsToSelector:@selector(icon)]) {
-        NSLog(@"[AppDataDebug] iconView has no icon property, going one level up. iconView was: %@", iconView);
+        NSLog(@"iconView: %@",iconView);
         iconView = (SBIconView *)[iconView superview];
     }
     [self presentControllerFromSBIconImageView:iconImageView iconView:iconView fromContextMenu:contextMenu];
@@ -114,9 +110,7 @@
 #pragma mark - Internal
 
 + (void)presentControllerFromSBIconImageView:(SBIconImageView *)iconImageView iconView:(SBIconView *)iconView fromContextMenu:(BOOL)contextMenu {
-    NSLog(@"[AppDataDebug] presentControllerFromSBIconImageView (Internal) called.");
-    NSLog(@"[AppDataDebug] iconImageView: %@", iconImageView);
-    NSLog(@"[AppDataDebug] iconView: %@", iconView);
+    NSLog(@"iconImageView: %@",iconImageView);
     
     // 获取 RootController，增强 iOS 15/16 兼容性
     UIViewController *rootController = nil;
@@ -128,7 +122,6 @@
     
     // Fallback 到 window root controller
     if (!rootController) {
-        NSLog(@"[AppDataDebug] _viewControllerForAncestor failed, falling back to window root");
         UIWindow *window = iconView.window;
         if (!window) window = [UIApplication sharedApplication].keyWindow;
         rootController = window.rootViewController;
@@ -137,7 +130,7 @@
         }
     }
     
-    NSLog(@"[AppDataDebug] Resolved rootController: %@", rootController);
+    NSLog(@"rootController: %@",rootController);
     
     // iOS 15+ 兼容新的 BundleID 提取逻辑
     if ([iconView respondsToSelector:@selector(icon)] && [iconImageView respondsToSelector:@selector(contentsImage)]) {
@@ -149,17 +142,13 @@
             bundleID = [icon performSelector:@selector(applicationBundleID)];
         }
         
-        NSLog(@"[AppDataDebug] Extracted BundleID: %@", bundleID);
-        
         if (!bundleID) {
-            NSLog(@"[AppDataDebug] ERROR: BundleID is nil");
             [self showAlertFromViewController:rootController title:@"AppData" message:@"Could not fetch bundle ID." cancelTitle:@"Okay"];
             return;
         }
         
         ADAppData *appData = [ADAppData appDataForBundleIdentifier:bundleID iconImage:iconImageView.contentsImage];
         if (appData) {
-            NSLog(@"[AppDataDebug] Successfully created appData instance. Presenting ViewController...");
             appData.iconView = iconView;
             
             [[UISelectionFeedbackGenerator new] selectionChanged];
@@ -186,11 +175,8 @@
                 dataViewController.dockDismissed = [self.class dismissFloatingDockIfNeededWithCompletion:nil];
                 [rootController presentViewController:dataViewController animated:YES completion:nil];
             }
-        } else {
-            NSLog(@"[AppDataDebug] ERROR: appData instance creation returned nil");
         }
     } else {
-        NSLog(@"[AppDataDebug] ERROR: Icon or contentImage is invalid. class: %@", [iconView class]);
         [self showAlertFromViewController:rootController
                                     title:@"AppData"
                                   message:[NSString stringWithFormat:@"Could not fetch app data.\n\n%@ is not a valid icon class.",[iconView class]]
@@ -410,6 +396,8 @@
     // Apply text colors
     UIColor *primaryLabelColor = [ADAppearance.sharedInstance primaryTextColor];
     UIColor *secondaryLabelsColor = [ADAppearance.sharedInstance secondaryTextColor];
+    // secondaryLabelsColor = [UIColor colorWithRed:0.922 green:0.922 blue:0.961 alpha:0.6];
+    // secondaryLabelsColor = [UIColor colorWithRed:0.235294 green:0.235294 blue:0.262745 alpha:0.65]; Light
 
     [self.nameLabel setTitleColor:primaryLabelColor forState:UIControlStateNormal];
     [self.identifierLabel setTitleColor:secondaryLabelsColor forState:UIControlStateNormal];
