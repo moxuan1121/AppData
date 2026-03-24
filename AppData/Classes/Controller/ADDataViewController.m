@@ -17,8 +17,6 @@
 #define IS_IPAD (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad)
 #endif
 
-static NSString * const kADAlertTitle = @".alert";
-
 @interface ADDataViewController () <UIGestureRecognizerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate>
 
 @property (nonatomic, strong) ADDataPresentationManager *presentationManager;
@@ -45,6 +43,8 @@ static NSString * const kADAlertTitle = @".alert";
 @end
 
 @implementation ADDataViewController
+
+#pragma mark - Icon Helpers
 
 static inline SBIconImageView *ADGetIconImageViewFromIconView(SBIconView *iconView) {
     if (!iconView) return nil;
@@ -74,6 +74,49 @@ static inline SBIconImageView *ADGetIconImageViewFromIconView(SBIconView *iconVi
     return iconImageView;
 }
 
+static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
+    // 58pt 图标用 13 左右会比较接近系统那种“微圆”
+    return round(side * 0.224f);
+}
+
+static UIImage *ADRoundedSquareIconImage(UIImage *image) {
+    if (!image) return nil;
+
+    CGSize size = image.size;
+    CGFloat side = MIN(size.width, size.height);
+    CGRect cropRect = CGRectMake((size.width - side) * 0.5f,
+                                 (size.height - side) * 0.5f,
+                                 side,
+                                 side);
+
+    UIGraphicsBeginImageContextWithOptions(CGSizeMake(side, side), NO, image.scale);
+    CGContextRef ctx = UIGraphicsGetCurrentContext();
+
+    CGFloat radius = ADIconContinuousCornerRadiusForSide(side);
+    UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(0, 0, side, side)
+                                                    cornerRadius:radius];
+    [path addClip];
+
+    [image drawAtPoint:CGPointMake(-cropRect.origin.x, -cropRect.origin.y)];
+
+    UIImage *roundedImage = UIGraphicsGetImageFromCurrentImageContext();
+    CGContextFlush(ctx);
+    UIGraphicsEndImageContext();
+
+    return roundedImage;
+}
+
+- (void)applyRoundedStyleToPreviewIconView {
+    self.iconImageView.clipsToBounds = YES;
+    self.iconImageView.layer.masksToBounds = YES;
+    self.iconImageView.contentMode = UIViewContentModeScaleAspectFill;
+    self.iconImageView.layer.cornerRadius = ADIconContinuousCornerRadiusForSide(58.0);
+
+    if (@available(iOS 13.0, *)) {
+        self.iconImageView.layer.cornerCurve = kCACornerCurveContinuous;
+    }
+}
+
 - (instancetype)initWithAppData:(ADAppData *)data {
     if (self = [super init]) {
         ADDataPresentationConfiguration *config = [[ADDataPresentationConfiguration alloc] init];
@@ -99,7 +142,7 @@ static inline SBIconImageView *ADGetIconImageViewFromIconView(SBIconView *iconVi
 
 + (void)presentControllerFromSBIconView:(SBIconView *)iconView fromContextMenu:(BOOL)contextMenu {
     if (!iconView) {
-        [self showAlertWithTitle:kADAlertTitle message:[NSString stringWithFormat:@"Could not fetch app data.\n\nError: Empty icon view."]];
+        [self showAlertWithTitle:@"AppData" message:[NSString stringWithFormat:@"Could not fetch app data.\n\nError: Empty icon view."]];
         return;
     }
     
@@ -123,7 +166,7 @@ static inline SBIconImageView *ADGetIconImageViewFromIconView(SBIconView *iconVi
     }
     
     if (!_iconImageView) {
-        [self showAlertWithTitle:kADAlertTitle message:[NSString stringWithFormat:@"Could not fetch app data.\n\nError: could not find icon image view."]];
+        [self showAlertWithTitle:@"AppData" message:[NSString stringWithFormat:@"Could not fetch app data.\n\nError: could not find icon image view."]];
         return;
     }
     [self presentControllerFromSBIconImageView:_iconImageView iconView:iconView fromContextMenu:contextMenu];
@@ -176,7 +219,7 @@ static inline SBIconImageView *ADGetIconImageViewFromIconView(SBIconView *iconVi
         }
         
         if (!bundleID) {
-            [self showAlertFromViewController:rootController title:kADAlertTitle message:@"Could not fetch bundle ID." cancelTitle:@"Okay"];
+            [self showAlertFromViewController:rootController title:@"AppData" message:@"Could not fetch bundle ID." cancelTitle:@"Okay"];
             return;
         }
         
@@ -211,7 +254,7 @@ static inline SBIconImageView *ADGetIconImageViewFromIconView(SBIconView *iconVi
         }
     } else {
         [self showAlertFromViewController:rootController
-                                    title:kADAlertTitle
+                                    title:@"AppData"
                                   message:[NSString stringWithFormat:@"Could not fetch app data.\n\n%@ is not a valid icon class.", [iconView class]]
                               cancelTitle:@"Okay"];
     }
@@ -282,6 +325,8 @@ static inline SBIconImageView *ADGetIconImageViewFromIconView(SBIconView *iconVi
     } else {
         self.iconImageView.image = self.appData.iconImage;
     }
+
+    [self applyRoundedStyleToPreviewIconView];
     
     self.appStoreButton.hidden = ![self.appData hasAppStoreApp];
     
@@ -353,6 +398,7 @@ static inline SBIconImageView *ADGetIconImageViewFromIconView(SBIconView *iconVi
     [self.iconImageView.topAnchor constraintEqualToAnchor:containerView.topAnchor constant:15].active = YES;
     [self.iconImageView.widthAnchor constraintEqualToConstant:58].active = YES;
     [self.iconImageView.heightAnchor constraintEqualToConstant:58].active = YES;
+    [self applyRoundedStyleToPreviewIconView];
 
     UIButton *iconButton = [UIButton buttonWithType:UIButtonTypeCustom];
     iconButton.translatesAutoresizingMaskIntoConstraints = NO;
@@ -450,6 +496,7 @@ static inline SBIconImageView *ADGetIconImageViewFromIconView(SBIconView *iconVi
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     [self layoutTableViews];
+    [self applyRoundedStyleToPreviewIconView];
     
     // Apply blur effect to contentView
     self.contentView.effect = [UIBlurEffect effectWithStyle:[ADAppearance.sharedInstance blurEffectStyle]];
@@ -648,18 +695,14 @@ static inline SBIconImageView *ADGetIconImageViewFromIconView(SBIconView *iconVi
 #pragma mark - Custom Icon Replacement
 
 - (void)didTapIconImageView:(id)sender {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:kADAlertTitle
-                                                                   message:@"选择一张图片替换当前App在桌面上的图标缓存（不修改原App文件）"
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@".alert"
+                                                                   message:@"请选择要执行的操作"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
 
     [alert addAction:[UIAlertAction actionWithTitle:@"从相册选择"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction * _Nonnull action) {
-        UIImagePickerController *picker = [[UIImagePickerController alloc] init];
-        picker.delegate = self;
-        picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
-        picker.allowsEditing = YES;
-        [self presentViewController:picker animated:YES completion:nil];
+        [self performSelector:@selector(presentImagePickerForCustomIcon) withObject:nil afterDelay:0.05];
     }]];
 
     [alert addAction:[UIAlertAction actionWithTitle:@"恢复默认图标"
@@ -672,11 +715,6 @@ static inline SBIconImageView *ADGetIconImageViewFromIconView(SBIconView *iconVi
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
 
-    if (IS_IPAD) {
-        alert.popoverPresentationController.sourceView = self.iconImageView;
-        alert.popoverPresentationController.sourceRect = self.iconImageView.bounds;
-    }
-
     BOOL dismissed = [self.class dismissFloatingDockIfNeededWithCompletion:^{
         [self presentViewController:alert animated:YES completion:nil];
     }];
@@ -685,6 +723,14 @@ static inline SBIconImageView *ADGetIconImageViewFromIconView(SBIconView *iconVi
     if (!dismissed) {
         [self presentViewController:alert animated:YES completion:nil];
     }
+}
+
+- (void)presentImagePickerForCustomIcon {
+    UIImagePickerController *picker = [[UIImagePickerController alloc] init];
+    picker.delegate = self;
+    picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+    picker.allowsEditing = YES;
+    [self presentViewController:picker animated:YES completion:nil];
 }
 
 - (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<NSString *,id> *)info {
@@ -719,9 +765,14 @@ static inline SBIconImageView *ADGetIconImageViewFromIconView(SBIconView *iconVi
                                                    attributes:nil
                                                         error:nil];
     }
+
+    UIImage *finalImage = ADRoundedSquareIconImage(image);
+    if (!finalImage) {
+        finalImage = image;
+    }
     
     NSString *path = [dirPath stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.png", bundleID]];
-    [UIImagePNGRepresentation(image) writeToFile:path atomically:YES];
+    [UIImagePNGRepresentation(finalImage) writeToFile:path atomically:YES];
 
     [self refreshSBIcon];
 }
@@ -742,12 +793,14 @@ static inline SBIconImageView *ADGetIconImageViewFromIconView(SBIconView *iconVi
     NSString *bundleID = self.appData.bundleIdentifier;
     NSString *path = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
     
-    // 1. 刷新当前面板显示的图标
+    // 1. 刷新当前 AppData 面板显示的图标
     if ([[NSFileManager defaultManager] fileExistsAtPath:path]) {
         self.iconImageView.image = [UIImage imageWithContentsOfFile:path];
     } else {
         self.iconImageView.image = self.appData.iconImage;
     }
+
+    [self applyRoundedStyleToPreviewIconView];
 
     // 2. 优先刷新当前桌面 icon image view
     if (self.appData.iconView) {
