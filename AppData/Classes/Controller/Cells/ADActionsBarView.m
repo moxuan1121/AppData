@@ -41,18 +41,22 @@
     [view addTarget:self action:@selector(touchUpOutside:) forControlEvents:UIControlEventTouchUpOutside];
     [view addTarget:self action:@selector(buttonDragOutside:) forControlEvents:UIControlEventTouchDragOutside];
     [view addTarget:self action:@selector(buttonDragInside:) forControlEvents:UIControlEventTouchDragInside];
-        
+
     view.actionImageView = [[UIImageView alloc] init];
     view.actionImageView.userInteractionEnabled = NO;
     [view.actionImageView setImage:[image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]];
-    view.actionImageView.contentMode = UIViewContentModeScaleAspectFill;
+    
+    // 【修改点1】：使用等比例缩放，不裁切变形
+    view.actionImageView.contentMode = UIViewContentModeScaleAspectFit;
     view.actionImageView.translatesAutoresizingMaskIntoConstraints = NO;
     [view addSubview:view.actionImageView];
-    [view.actionImageView.topAnchor constraintEqualToAnchor:view.topAnchor constant:5].active = YES;
+
+    // 【修改点2】：锁定统一大小 28x28，居中对齐
+    [view.actionImageView.topAnchor constraintEqualToAnchor:view.topAnchor constant:10].active = YES;
     [view.actionImageView.centerXAnchor constraintEqualToAnchor:view.centerXAnchor].active = YES;
-    [view.actionImageView.widthAnchor constraintEqualToAnchor:view.actionImageView.heightAnchor].active = YES;
-    [view.actionImageView.heightAnchor constraintEqualToAnchor:view.heightAnchor multiplier:0.35].active = YES;
-    
+    [view.actionImageView.widthAnchor constraintEqualToConstant:28].active = YES;
+    [view.actionImageView.heightAnchor constraintEqualToConstant:28].active = YES;
+
     UIView *activityContainerView = [[UIView alloc] init];
     activityContainerView.userInteractionEnabled = NO;
     activityContainerView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -70,7 +74,7 @@
     [activityContainerView addSubview:view.activityIndicatorView];
     [view.activityIndicatorView.centerXAnchor constraintEqualToAnchor:activityContainerView.centerXAnchor].active = YES;
     [view.activityIndicatorView.centerYAnchor constraintEqualToAnchor:activityContainerView.centerYAnchor].active = YES;
-    
+
     view.nameLabel = [[UILabel alloc] init];
     view.nameLabel.tag = 2;
     view.nameLabel.userInteractionEnabled = NO;
@@ -80,13 +84,14 @@
     [view.nameLabel setText:title];
     view.nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
     [view addSubview:view.nameLabel];
-    [view.nameLabel.topAnchor constraintEqualToAnchor:view.actionImageView.bottomAnchor].active = YES;
+    
+    // 【修改点3】：为图标与文字增加 4pt 的固定间距，看着更舒服
+    [view.nameLabel.topAnchor constraintEqualToAnchor:view.actionImageView.bottomAnchor constant:4].active = YES;
     [view.nameLabel.leadingAnchor constraintEqualToAnchor:view.leadingAnchor constant:2].active = YES;
     [view.nameLabel.trailingAnchor constraintEqualToAnchor:view.trailingAnchor constant:-2].active = YES;
 
     if (detail && detail.length > 0) {
         [view.nameLabel.heightAnchor constraintEqualToAnchor:view.heightAnchor multiplier:0.35].active = YES;
-        
         view.detailLabel = [[UILabel alloc] init];
         view.detailLabel.tag = 3;
         view.detailLabel.userInteractionEnabled = NO;
@@ -173,7 +178,6 @@
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-   
     self.nameLabel.textColor = [ADAppearance.sharedInstance primaryTextColor];
     self.detailLabel.textColor = [ADAppearance.sharedInstance secondaryTextColor];
     self.actionImageView.tintColor = [ADAppearance.sharedInstance actionsBarIconTintColor];
