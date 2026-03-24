@@ -11,11 +11,7 @@ struct SBIconImageInfo {
     CGFloat continuousCornerRadius;
 };
 
-@interface SBIcon : NSObject
-- (NSString *)applicationBundleID;
-- (NSString *)applicationBundleIdentifier;
-@end
-
+// 修复编译报错：删除 SBIcon 的重复声明，因为 Headers.h 中已经有了
 @interface SBLeafIcon : SBIcon
 @end
 
@@ -140,7 +136,6 @@ struct SBIconImageInfo {
 
 #pragma mark - Custom Icon Replacement (SBIcon)
 
-// 【修复编译报错】：将 SBIcon 这个 Hook 移到了 SHARED_HOOKS 分组内
 %hook SBIcon
 
 // iOS 14-16 生成图标核心方法，解决打开/关闭 App 瞬间图标闪回原版的问题
