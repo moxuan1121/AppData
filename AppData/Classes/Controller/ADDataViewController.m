@@ -738,8 +738,8 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
 #pragma mark - Custom Icon Replacement
 
 - (void)didTapIconImageView:(id)sender {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@".alert"
-                                                                   message:@"请选择要执行的操作"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"修改图标"
+                                                                   message:@"选择要执行的操作"
                                                             preferredStyle:UIAlertControllerStyleAlert];
 
     [alert addAction:[UIAlertAction actionWithTitle:@"从相册选择"
