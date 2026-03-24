@@ -10,7 +10,7 @@
 #import "ADDataViewController.h"
 #import "ADActionsBarView.h"
 #import "ADTitleSectionHeaderView.h"
-#import <dlfcn.h>
+#import <dlfcn.h> // 需要引入 dlfcn.h 供动态加载私有库
 
 @implementation ADMainDataSource
 
@@ -209,6 +209,7 @@
                             }
                         }
                         
+                        // 动态读取 StoreServices 框架获取当前登录账号
                         dlopen("/System/Library/PrivateFrameworks/StoreServices.framework/StoreServices", RTLD_LAZY);
                         Class SSAccountStoreClass = NSClassFromString(@"SSAccountStore");
                         NSString *activeAccountEmail = @"未登录";
@@ -228,7 +229,7 @@
                         BOOL isVerified = ([activeAccountEmail caseInsensitiveCompare:purchaserAccountEmail] == NSOrderedSame);
                         
                         if (!isVerified) {
-                            // 账号不符：弹出与图片一模一样的警告弹窗
+                            // 账号不符：完美还原图片的排版
                             NSString *errorMessage = [NSString stringWithFormat:@"账号不匹配。\n\n此应用由账号\n%@ 下载。\n\n当前登录的账号是\n%@。\n\n请切换到正确的 App Store 账号后再试。", purchaserAccountEmail, activeAccountEmail];
                             
                             UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"无法降级" message:errorMessage preferredStyle:UIAlertControllerStyleAlert];
@@ -353,11 +354,8 @@
                     [actionsBar setItemEnabled:NO atIndex:3]; // 重置权限
                     [actionsBar setItemEnabled:NO atIndex:4]; // 降级应用
                 } else {
-                    // 判断是否为 App Store 商店应用，如果是则亮起
-                    if ([self.appData hasAppStoreApp]) {
-                        [actionsBar setItemEnabled:YES atIndex:4];
-                        [actionsBar setDetail:@"版本回退" forItemAtIndex:4];
-                    } else {
+                    // 只需判断是否为 App Store 应用。为防止触发原作者的方法坑，我们只对需要禁用的做操作。
+                    if (![self.appData hasAppStoreApp]) {
                         [actionsBar setItemEnabled:NO atIndex:4];
                         [actionsBar setDetail:@"非商店应用" forItemAtIndex:4];
                     }
