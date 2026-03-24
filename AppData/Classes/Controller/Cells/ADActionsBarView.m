@@ -113,7 +113,7 @@
 
 - (void)setItemEnabled:(BOOL)enabled atIndex:(NSInteger)index {
     ADActionButton *button = [self.arrangedSubviews objectAtIndex:index];
-    [button setEnabled:NO];
+    [button setEnabled:enabled];
     button.actionImageView.alpha = enabled ? 1.0 : 0.5;
     button.nameLabel.alpha = enabled ? 1.0 : 0.5;
     button.detailLabel.alpha = enabled ? 1.0 : 0.5;
