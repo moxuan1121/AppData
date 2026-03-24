@@ -66,13 +66,12 @@
         }
         cell.accessoryView = [ADAppearance.sharedInstance tableCellChevronImageView];
         [ADAppearance applyStylesToCell:cell];
-        
         if ([self isContainersSection:indexPath.section]) {
             if (indexPath.row == 0) {
-                cell.textLabel.text = @"Bundle";
+                cell.textLabel.text = @"应用目录";
                 cell.detailTextLabel.text = self.appData.bundleURL.path;
             } else if (indexPath.row == 1) {
-                cell.textLabel.text = @"Data";
+                cell.textLabel.text = @"数据目录";
                 cell.detailTextLabel.text = self.appData.dataContainerURL.path;
             }
         } else if ([self isAppGroupsSection:indexPath.section]) {
@@ -81,7 +80,6 @@
             cell.detailTextLabel.text = group.url.path;
         }
         return cell;
-        
     } else if ([self isManageSection:indexPath.section]) {
         if (indexPath.row == 0) {
             UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ManageCellIdentifier"];
@@ -98,40 +96,37 @@
                 [actionsBar.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor].active = YES;
                 [actionsBar.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor].active = YES;
                 [actionsBar.bottomAnchor constraintEqualToAnchor:cell.contentView.bottomAnchor].active = YES;
-                
                 __weak ADActionsBarView *weakActionsBar = actionsBar;
                 
-                // Clear Badge
-                [actionsBar addItemWithTitle:@"Update\nBadge"
+                // 1. Update Badge
+                [actionsBar addItemWithTitle:@"修改\n角标"
                                       detail:[NSString stringWithFormat:@"%td",[self.appData appBadgeCount]]
                                        image:[ADHelper imageNamed:@"ClearBadge"]
                                      handler:^{
-                    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"Badges"
-                                                                                             message:[NSString stringWithFormat:@"Update or clear the app badges count"]
+                    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"应用角标"
+                                                                                             message:@"修改或清除当前应用的角标数量"
                                                                                       preferredStyle:UIAlertControllerStyleAlert];
-                    
                     [alertController addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
                         textField.text = [NSString stringWithFormat:@"%td",self.appData.appBadgeCount];
-                        textField.placeholder = @"Badge Count";
+                        textField.placeholder = @"角标数量";
                         textField.textAlignment = NSTextAlignmentCenter;
                         textField.enabled = NO;
                     }];
-                    
-                    [alertController addAction:[UIAlertAction actionWithTitle:@"Update" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                    [alertController addAction:[UIAlertAction actionWithTitle:@"修改" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
                         UITextField *field = alertController.textFields.firstObject;
                         NSInteger count = [field.text integerValue];
                         [self.appData setAppBadgeCount:count];
-                        [weakActionsBar setDetail:@"Updated!" forItemAtIndex:0];
+                        [weakActionsBar setDetail:@"已修改!" forItemAtIndex:0];
                         DISPATCH_AFTER(0.5, { [weakActionsBar setDetail:[NSString stringWithFormat:@"%td",count] forItemAtIndex:0]; });
                         if (self.dataViewController.dockDismissed && IS_IPAD) [ADDataViewController presentFloatingDockIfNeeded];
                     }]];
-                    [alertController addAction:[UIAlertAction actionWithTitle:@"Clear" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                    [alertController addAction:[UIAlertAction actionWithTitle:@"清除" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
                         [self.appData setAppBadgeCount:0];
-                        [weakActionsBar setDetail:@"Cleared!" forItemAtIndex:0];
+                        [weakActionsBar setDetail:@"已清除!" forItemAtIndex:0];
                         DISPATCH_AFTER(0.5, { [weakActionsBar setDetail:@"0" forItemAtIndex:0]; });
                         if (self.dataViewController.dockDismissed && IS_IPAD) [ADDataViewController presentFloatingDockIfNeeded];
                     }]];
-                    [alertController addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+                    [alertController addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
                         if (self.dataViewController.dockDismissed && IS_IPAD) [ADDataViewController presentFloatingDockIfNeeded];
                     }]];
                     
@@ -148,18 +143,18 @@
                     }
                 }];
                 
-                // Clear Caches
-                [actionsBar addItemWithTitle:@"Clear\nCaches"
-                                      detail:@"Loading..."
+                // 2. Clear Caches
+                [actionsBar addItemWithTitle:@"清理\n缓存"
+                                      detail:@"计算中..."
                                        image:[ADHelper imageNamed:@"ClearCache"]
                                      handler:^{
                     NSInteger itemIndex = 1;
                     [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
-                    [weakActionsBar setDetail:@"Clearing..." forItemAtIndex:itemIndex];
+                    [weakActionsBar setDetail:@"清理中..." forItemAtIndex:itemIndex];
                     DISPATCH_AFTER(0.5, {
                         [self.appData clearAppCachesWithCompletion:^{
                             [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
-                            [weakActionsBar setDetail:@"Cleared!" forItemAtIndex:itemIndex];
+                            [weakActionsBar setDetail:@"已清除!" forItemAtIndex:itemIndex];
                             [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
                             DISPATCH_AFTER(0.5, {
                                 [self.appData getCachesDirectorySizeWithCompletion:^(NSString *formattedSize) {
@@ -170,43 +165,43 @@
                     });
                 }];
                 
-                // Clear App Data
-                [actionsBar addItemWithTitle:@"Clear App Data"
-                                      detail:@"Loading..."
+                // 3. Clear App Data
+                [actionsBar addItemWithTitle:@"清理\n数据"
+                                      detail:@"计算中..."
                                        image:[ADHelper imageNamed:@"ClearData"]
                                      handler:^{
                     if (self.appData.isApplication) {
-                        [self showDestructiveConfirmationAlertWithTitle:@"Clear App Data" message:@"Clearing App data will only delete the app's \"Library\" and \"Documents\" folders inside Data bundle and not the App Groups." confirmTitle:@"Clear" confirmHandler:^{
+                        [self showDestructiveConfirmationAlertWithTitle:@"清理应用数据" message:@"清理应用数据将只会删除应用沙盒中的“Library”和“Documents”文件夹，不会删除App Groups分组数据。" confirmTitle:@"清理" confirmHandler:^{
                             NSInteger itemIndex = 2;
                             [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
-                            [weakActionsBar setDetail:@"Clearing..." forItemAtIndex:itemIndex];
+                            [weakActionsBar setDetail:@"清理中..." forItemAtIndex:itemIndex];
                             DISPATCH_AFTER(0.5, {
                                 [self.appData resetDiskContentWithCompletion:^{
                                     [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
-                                    [weakActionsBar setDetail:@"Cleared!" forItemAtIndex:itemIndex];
+                                    [weakActionsBar setDetail:@"已清理!" forItemAtIndex:itemIndex];
                                     [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
                                     DISPATCH_AFTER(0.5, {
-                                         [self.appData getAppUsageDirectorySizeWithCompletion:^(NSString *formattedSize) {
+                                        [self.appData getAppUsageDirectorySizeWithCompletion:^(NSString *formattedSize) {
                                             [weakActionsBar setDetail:formattedSize forItemAtIndex:itemIndex];
                                         }];
                                     });
                                 }];
-                            });
+                             });
                         }];
                     }
                 }];
                 
-                // Reset Permissions
-                [actionsBar addItemWithTitle:@"Reset Permissions"
+                // 4. Reset Permissions
+                [actionsBar addItemWithTitle:@"重置\n权限"
                                       detail:[NSString stringWithFormat:@"%td",[self.appData getPermissions].count]
                                        image:[ADHelper imageNamed:@"ResetPermissions"]
                                      handler:^{
                     if (self.appData.isApplication) {
-                        [self showDestructiveConfirmationAlertWithTitle:@"Reset Permissions" message:@"This will clear all the app permissions to access your Contacts, Photos, Camera, etc.\nNext time you use the app it will ask you again to grant permissions."
-                        confirmTitle:@"Reset" confirmHandler:^{
+                        [self showDestructiveConfirmationAlertWithTitle:@"重置应用权限" message:@"这将清除该应用访问通讯录、照片、相机等的所有权限。\n下次打开该应用时会重新请求这些权限。"
+                        confirmTitle:@"重置" confirmHandler:^{
                             NSInteger itemIndex = 3;
                             [self.appData resetAllAppPermissions];
-                            [weakActionsBar setDetail:@"Reset!" forItemAtIndex:itemIndex];
+                            [weakActionsBar setDetail:@"已重置!" forItemAtIndex:itemIndex];
                             [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
                             DISPATCH_AFTER(0.5, {
                                [weakActionsBar setDetail:[NSString stringWithFormat:@"%td",[self.appData getPermissions].count] forItemAtIndex:itemIndex];
@@ -215,14 +210,14 @@
                     }
                 }];
                 
-                // Uninstall App (Replaces original Offload App)
-                [actionsBar addItemWithTitle:@"Uninstall\nApp"
-                                      detail:nil
+                // 5. Uninstall App (加入"彻底删除"小字)
+                [actionsBar addItemWithTitle:@"卸载\n应用"
+                                      detail:@"彻底删除"
                                        image:[ADHelper imageNamed:@"OffloadApp"]
                                      handler:^{
                     if (self.appData.isDeletable) {
-                        [self showDestructiveConfirmationAlertWithTitle:@"Uninstall App" message:@"This will completely remove the application and all of its data. This action cannot be undone."
-                        confirmTitle:@"Uninstall" confirmHandler:^{
+                        [self showDestructiveConfirmationAlertWithTitle:@"卸载应用" message:@"这将彻底卸载该应用并删除其所有数据。\n此操作不可撤销！"
+                        confirmTitle:@"卸载" confirmHandler:^{
                             NSInteger itemIndex = 4;
                             [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
                             
@@ -233,10 +228,8 @@
                                     [self.dataViewController dismiss]; // Close the AppData panel on success
                                 } else {
                                     [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeError];
-                                    
-                                    // 直接在当前方法构建错误提示框，避免调用头文件未公开的类方法
-                                    UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"Error" message:@"Failed to uninstall the application." preferredStyle:UIAlertControllerStyleAlert];
-                                    [errorAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
+                                    UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"错误" message:@"卸载应用失败。" preferredStyle:UIAlertControllerStyleAlert];
+                                    [errorAlert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleCancel handler:nil]];
                                     [self.dataViewController presentViewController:errorAlert animated:YES completion:nil];
                                 }
                             }];
@@ -268,7 +261,6 @@
                 }];
             }
             return cell;
-            
         } else if (indexPath.row == 1) {
             UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"MoreInfoCellIdentifier"];
             if (!cell) {
@@ -276,7 +268,7 @@
                 cell.backgroundColor = [UIColor clearColor];
             }
             cell.accessoryView = [ADAppearance.sharedInstance tableCellChevronImageView];
-            cell.textLabel.text = @"More Info";
+            cell.textLabel.text = @"更多信息";
             [ADAppearance applyStylesToCell:cell];
             return cell;
         }
@@ -307,11 +299,11 @@
 
 - (NSString *)titleForHeaderInSection:(NSInteger)section {
     if ([self isContainersSection:section]) {
-        return self.appData.isApplication ? @"Containers" : nil;
+        return self.appData.isApplication ? @"沙盒目录" : nil;
     } else if ([self isAppGroupsSection:section]) {
-        return !self.appData.appGroups || self.appData.appGroups.count == 0 ? nil : @"App Groups";
+        return !self.appData.appGroups || self.appData.appGroups.count == 0 ? nil : @"应用分组 (App Groups)";
     } else if ([self isManageSection:section]) {
-        return @"Manage";
+        return @"管理";
     }
     return nil;
 }
@@ -338,7 +330,6 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    
     if ([self isManageSection:indexPath.section]) {
         if (indexPath.row == 1) {
             [self.dataViewController switchTableViews];
@@ -394,18 +385,17 @@
                                                                                           previewProvider:nil
                                                                                            actionProvider:^UIMenu * _Nullable(NSArray<UIMenuElement *> * _Nonnull suggestedActions) {
             NSMutableArray *actions = [NSMutableArray new];
-            
-            [actions addObject:[UIAction actionWithTitle:@"Open in Filza" image:nil identifier:@"open-action" handler:^(__kindof UIAction * _Nonnull action) {
+            [actions addObject:[UIAction actionWithTitle:@"在 Filza 中打开" image:nil identifier:@"open-action" handler:^(__kindof UIAction * _Nonnull action) {
                 [self didSelectContainerOrAppGroupSectionAtIndexPath:indexPath];
             }]];
             
-            [actions addObject:[UIAction actionWithTitle:@"Copy Path" image:nil identifier:@"copy-action" handler:^(__kindof UIAction * _Nonnull action) {
+            [actions addObject:[UIAction actionWithTitle:@"复制路径" image:nil identifier:@"copy-action" handler:^(__kindof UIAction * _Nonnull action) {
                 UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
                 if (cell.detailTextLabel.text) [[UIPasteboard generalPasteboard] setString:cell.detailTextLabel.text];
             }]];
             
             if ([self isAppGroupsSection:indexPath.section]) {
-                [actions addObject:[UIAction actionWithTitle:@"Copy Identifier" image:nil identifier:@"copy-action" handler:^(__kindof UIAction * _Nonnull action) {
+                [actions addObject:[UIAction actionWithTitle:@"复制 Identifier" image:nil identifier:@"copy-action" handler:^(__kindof UIAction * _Nonnull action) {
                     UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
                     if (cell.textLabel.text) [[UIPasteboard generalPasteboard] setString:cell.textLabel.text];
                 }]];
@@ -413,10 +403,10 @@
             
             NSString *title = @"";
             if ([self isContainersSection:indexPath.section]) {
-                if (indexPath.row == 0) title = @"Bundle";
-                else if (indexPath.row == 1) title = @"Data";
+                if (indexPath.row == 0) title = @"应用目录";
+                else if (indexPath.row == 1) title = @"数据目录";
             } else if ([self isAppGroupsSection:indexPath.section]) {
-                title = @"App Group";
+                title = @"应用分组";
             }
             
             return [UIMenu menuWithTitle:title children:actions];
@@ -450,12 +440,10 @@
 
 - (void)showConfirmationAlertWithTitle:(NSString *)title message:(NSString *)message confirmTitle:(NSString *)confirmTitle confirmStyle:(UIAlertActionStyle)style confirmHandler:(void(^)())confirmHandler {
     UIAlertController *alertController = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
-    
     [alertController addAction:[UIAlertAction actionWithTitle:confirmTitle style:style handler:^(UIAlertAction * _Nonnull action) {
         if (confirmHandler) confirmHandler();
     }]];
-    
-    [alertController addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [alertController addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [self.dataViewController presentViewController:alertController animated:YES completion:nil];
 }
 
