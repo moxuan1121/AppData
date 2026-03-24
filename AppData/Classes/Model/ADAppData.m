@@ -162,16 +162,6 @@
     return [self.sbApplication respondsToSelector:@selector(displayName)] ? self.sbApplication.displayName : nil;
 }
 
-// === 新增：为兼容 TSDowngradeManager 桥接的属性 ===
-- (NSString *)displayName {
-    return [self name];
-}
-
-- (NSString *)bundlePath {
-    return self.bundleURL.path;
-}
-// ===========================================
-
 - (BOOL)isApplication {
     return self.sbApplication != nil;
 }
