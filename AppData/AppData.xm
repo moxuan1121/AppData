@@ -1,4 +1,8 @@
-#import "ADDataViewController.h"
+#import "Classes/Controller/ADDataViewController.h"
+
+// 声明遵循 UIGestureRecognizerDelegate 协议
+@interface SBIconImageView (AppData) <UIGestureRecognizerDelegate>
+@end
 
 %group SHARED_HOOKS
 
@@ -18,6 +22,10 @@
         // Create Gesture Recognizer
         self.adSwipeGestureRecognizer = [[UISwipeGestureRecognizer alloc] initWithTarget:r action:@selector(appDataDidSwipeUp:)];
         self.adSwipeGestureRecognizer.direction = (UISwipeGestureRecognizerDirectionUp);
+        
+        // 【关键修复】：设置代理，允许手势共存
+        self.adSwipeGestureRecognizer.delegate = (id<UIGestureRecognizerDelegate>)r;
+        
         r.userInteractionEnabled = YES;
         
         // Add gesture if enabled
@@ -44,6 +52,15 @@
     if (gesture.state == UIGestureRecognizerStateEnded) {
         [ADDataViewController presentControllerFromSBIconImageView:self fromContextMenu:NO];
     }
+}
+
+// 【关键修复】：允许上滑手势与 iOS 15/16+ 原生桌面手势（如长按/滑动列表）共存
+%new
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
+    if (gestureRecognizer == self.adSwipeGestureRecognizer) {
+        return YES;
+    }
+    return NO;
 }
 
 %end
@@ -153,10 +170,8 @@
 - (void)appIconForceTouchShortcutViewController:(id)arg1 activateApplicationShortcutItem:(SBSApplicationShortcutItem *)item {
     if ([item.type isEqualToString:kSBApplicationShortcutItemType]) {
         [self dismissAnimated:YES withCompletionHandler:nil];
-        
         SBUIAppIconForceTouchControllerDataProvider* _dataProvider = [self valueForKey:@"_dataProvider"];
         SBIconView *iconView = (SBIconView *)_dataProvider.gestureRecognizer.view;
-        
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
             [ADDataViewController presentControllerFromSBIconView:iconView fromContextMenu:YES];
         });
@@ -172,7 +187,6 @@
 
 %ctor {
     %init(SHARED_HOOKS);
-    
     if (@available(iOS 13, *)) {
         %init(IOS13_AND_NEWER_HOOKS);
     } else {
