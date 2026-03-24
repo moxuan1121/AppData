@@ -32,7 +32,23 @@ static inline UIImage *ADLoadCustomIconForBundleID(NSString *bundleID) {
     return [UIImage imageWithContentsOfFile:path];
 }
 
-static inline NSString *ADBundleIDFromIconImageView(SBIconImageView *iconImageView) {
+static inline NSString *ADBundleIDFromIcon(id icon) {
+    if (!icon) return nil;
+
+    if ([icon respondsToSelector:@selector(applicationBundleIdentifier)]) {
+        NSString *bundleID = [icon performSelector:@selector(applicationBundleIdentifier)];
+        if (bundleID.length) return bundleID;
+    }
+
+    if ([icon respondsToSelector:@selector(applicationBundleID)]) {
+        NSString *bundleID = [icon performSelector:@selector(applicationBundleID)];
+        if (bundleID.length) return bundleID;
+    }
+
+    return nil;
+}
+
+static inline id ADIconFromIconImageView(SBIconImageView *iconImageView) {
     if (!iconImageView) return nil;
 
     id icon = nil;
@@ -55,19 +71,11 @@ static inline NSString *ADBundleIDFromIconImageView(SBIconImageView *iconImageVi
         }
     }
 
-    if (!icon) return nil;
+    return icon;
+}
 
-    if ([icon respondsToSelector:@selector(applicationBundleIdentifier)]) {
-        NSString *bundleID = [icon performSelector:@selector(applicationBundleIdentifier)];
-        if (bundleID.length) return bundleID;
-    }
-
-    if ([icon respondsToSelector:@selector(applicationBundleID)]) {
-        NSString *bundleID = [icon performSelector:@selector(applicationBundleID)];
-        if (bundleID.length) return bundleID;
-    }
-
-    return nil;
+static inline NSString *ADBundleIDFromIconImageView(SBIconImageView *iconImageView) {
+    return ADBundleIDFromIcon(ADIconFromIconImageView(iconImageView));
 }
 
 static inline UIImage *ADRenderCustomIconForImageView(SBIconImageView *iconImageView) {
@@ -75,36 +83,19 @@ static inline UIImage *ADRenderCustomIconForImageView(SBIconImageView *iconImage
     UIImage *customImage = ADLoadCustomIconForBundleID(bundleID);
     if (!customImage) return nil;
 
-    CGFloat width = iconImageView.bounds.size.width;
-    CGFloat height = iconImageView.bounds.size.height;
-
-    if (width <= 0.0 || height <= 0.0) {
-        width = 60.0;
-        height = 60.0;
+    CGSize size = iconImageView.bounds.size;
+    if (size.width <= 0.0 || size.height <= 0.0) {
+        size = CGSizeMake(60.0, 60.0);
     }
 
     CGFloat scale = [UIScreen mainScreen].scale;
-    CGFloat cornerRadius = MIN(width, height) * 0.2237f;
+    CGFloat cornerRadius = round(MIN(size.width, size.height) * 0.2237f);
 
-    if ([iconImageView respondsToSelector:@selector(continuousCornerRadius)]) {
-        @try {
-            NSMethodSignature *sig = [iconImageView methodSignatureForSelector:@selector(continuousCornerRadius)];
-            if (sig) {
-                NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
-                [inv setSelector:@selector(continuousCornerRadius)];
-                [inv setTarget:iconImageView];
-                [inv invoke];
-                [inv getReturnValue:&cornerRadius];
-            }
-        } @catch (__unused NSException *e) {
-        }
-    }
-
-    UIGraphicsBeginImageContextWithOptions(CGSizeMake(width, height), NO, scale);
-    UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(0, 0, width, height)
+    UIGraphicsBeginImageContextWithOptions(size, NO, scale);
+    UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(0, 0, size.width, size.height)
                                                     cornerRadius:cornerRadius];
     [path addClip];
-    [customImage drawInRect:CGRectMake(0, 0, width, height)];
+    [customImage drawInRect:CGRectMake(0, 0, size.width, size.height)];
     UIImage *finalIcon = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
 
@@ -141,28 +132,55 @@ static inline void ADSafeRefreshIconImageView(SBIconImageView *iconImageView) {
         && [r respondsToSelector:@selector(setAdSwipeGestureRecognizer:)]) {
         [[NSNotificationCenter defaultCenter] addObserver:r selector:@selector(appDataPreferencesChanged) name:kAppDataSwipeUpPreferencesChangedNotification object:nil];
         
-        // Create Gesture Recognizer
         self.adSwipeGestureRecognizer = [[UISwipeGestureRecognizer alloc] initWithTarget:r action:@selector(appDataDidSwipeUp:)];
-        self.adSwipeGestureRecognizer.direction = (UISwipeGestureRecognizerDirectionUp);
-        
-        // 【关键修复】：设置代理，允许手势共存与干预
+        self.adSwipeGestureRecognizer.direction = UISwipeGestureRecognizerDirectionUp;
         self.adSwipeGestureRecognizer.delegate = (id<UIGestureRecognizerDelegate>)r;
         
         r.userInteractionEnabled = YES;
-        
-        // Add gesture if enabled
         [self appDataPreferencesChanged];
     }
     return r;
 }
 
-// 新增：更保守、更稳定地兜住显示层直接取图
+// 新增：显示层直接取图时也优先返回自定义图
 - (UIImage *)contentsImage {
     UIImage *customImage = ADRenderCustomIconForImageView(self);
     if (customImage) {
         return customImage;
     }
     return %orig;
+}
+
+// 新增：异步加载结束后再轻刷一次，减少进出应用时闪原图
+- (void)didEndAsynchronousImageLoadForIcon:(id)icon {
+    %orig;
+
+    NSString *bundleID = ADBundleIDFromIcon(icon);
+    if (!bundleID.length) {
+        bundleID = ADBundleIDFromIconImageView(self);
+    }
+
+    if (bundleID.length && ADLoadCustomIconForBundleID(bundleID)) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            ADSafeRefreshIconImageView(self);
+        });
+    }
+}
+
+// 新增：cache 回写时再轻刷一次，减少退出应用瞬间回原图
+- (void)iconImageCache:(id)cache didUpdateImageForIcon:(id)icon {
+    %orig;
+
+    NSString *bundleID = ADBundleIDFromIcon(icon);
+    if (!bundleID.length) {
+        bundleID = ADBundleIDFromIconImageView(self);
+    }
+
+    if (bundleID.length && ADLoadCustomIconForBundleID(bundleID)) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            ADSafeRefreshIconImageView(self);
+        });
+    }
 }
 
 %new
@@ -177,12 +195,12 @@ static inline void ADSafeRefreshIconImageView(SBIconImageView *iconImageView) {
         }
     }
 
-    // 第一阶段：立即失效当前缓存
+    // 立即刷新一次
     ADSafeRefreshIconImageView(self);
 
-    // 第二阶段：延迟轻刷一次，专门对付进/退应用时系统异步回写旧图
+    // 再延迟补一刀，解决“要滑页面才生效”和“进退应用闪一下”
     __weak SBIconImageView *weakSelf = self;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.18 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.12 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         SBIconImageView *strongSelf = weakSelf;
         if (!strongSelf) return;
         ADSafeRefreshIconImageView(strongSelf);
@@ -196,11 +214,11 @@ static inline void ADSafeRefreshIconImageView(SBIconImageView *iconImageView) {
     }
 }
 
-// 【精细化修复1】：智能判断是否允许手势共存，解决多插件重叠触发
+// 智能判断是否允许手势共存
 %new
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
     if (gestureRecognizer == self.adSwipeGestureRecognizer) {
-        if ([otherGestureRecognizer isKindOfClass:[UISwipeGestureRecognizer class]] || 
+        if ([otherGestureRecognizer isKindOfClass:[UISwipeGestureRecognizer class]] ||
             [otherGestureRecognizer isKindOfClass:[UIScreenEdgePanGestureRecognizer class]]) {
             return NO;
         }
@@ -209,7 +227,7 @@ static inline void ADSafeRefreshIconImageView(SBIconImageView *iconImageView) {
     return NO;
 }
 
-// 【精细化修复2】：抢占优先级，强行让其他插件的上滑手势失效
+// 抢占优先级，让其他插件的上滑手势失效
 %new
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
     if (gestureRecognizer == self.adSwipeGestureRecognizer) {
