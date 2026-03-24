@@ -219,3 +219,48 @@
         %init(IOS12_AND_OLDER_HOOKS);
     }
 }
+
+
+#pragma mark - Custom Icon Replacement (SBLeafIcon)
+
+// 声明 iOS 15/16 渲染相关的结构体和接口
+struct SBIconImageInfo {
+    CGSize size;
+    CGFloat scale;
+    CGFloat continuousCornerRadius;
+};
+
+@interface SBLeafIcon : NSObject
+- (NSString *)applicationBundleID;
+@end
+
+%hook SBLeafIcon
+
+// 劫持 SpringBoard 生成图标的核心方法
+- (UIImage *)generateIconImageWithInfo:(struct SBIconImageInfo)info {
+    NSString *bundleID = [self applicationBundleID];
+    if (bundleID && [bundleID isKindOfClass:[NSString class]]) {
+        NSString *customIconPath = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
+        
+        // 如果我们保存了自定义图片，则优先读取它
+        if ([[NSFileManager defaultManager] fileExistsAtPath:customIconPath]) {
+            UIImage *customImage = [UIImage imageWithContentsOfFile:customIconPath];
+            if (customImage) {
+                // 将原图按照系统所需的圆角、尺寸进行裁剪重绘
+                UIGraphicsBeginImageContextWithOptions(info.size, NO, info.scale);
+                UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(0, 0, info.size.width, info.size.height) cornerRadius:info.continuousCornerRadius];
+                [path addClip];
+                [customImage drawInRect:CGRectMake(0, 0, info.size.width, info.size.height)];
+                UIImage *finalIcon = UIGraphicsGetImageFromCurrentImageContext();
+                UIGraphicsEndImageContext();
+                
+                return finalIcon;
+            }
+        }
+    }
+    
+    // 如果没有找到自定义图片，则返回系统原生图标缓存
+    return %orig;
+}
+
+%end
