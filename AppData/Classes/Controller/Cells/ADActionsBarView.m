@@ -46,18 +46,18 @@
     view.actionImageView.userInteractionEnabled = NO;
     [view.actionImageView setImage:[image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]];
     
-    // 【修改点1】：使用等比例缩放，不裁切变形
+    // 使用等比例缩放，不裁切变形
     view.actionImageView.contentMode = UIViewContentModeScaleAspectFit;
     view.actionImageView.translatesAutoresizingMaskIntoConstraints = NO;
     [view addSubview:view.actionImageView];
 
-    // 【修改点2】：锁定统一大小 28x28，居中对齐
-    [view.actionImageView.topAnchor constraintEqualToAnchor:view.topAnchor constant:10].active = YES;
+    // 【修改点】：锁定统一大小为 32x32，为了保持垂直居中，top constant 调为 8
+    [view.actionImageView.topAnchor constraintEqualToAnchor:view.topAnchor constant:8].active = YES;
     [view.actionImageView.centerXAnchor constraintEqualToAnchor:view.centerXAnchor].active = YES;
-    [view.actionImageView.widthAnchor constraintEqualToConstant:36].active = YES;
-    [view.actionImageView.heightAnchor constraintEqualToConstant:36].active = YES;
+    [view.actionImageView.widthAnchor constraintEqualToConstant:32].active = YES;
+    [view.actionImageView.heightAnchor constraintEqualToConstant:32].active = YES;
 
-    // 【修复点：找回加载动画】直接把加载动画贴在图标正中心，去除多余的容器避免约束冲突
+    // 【修复加载动画】：赋予它和 actionImageView 完全独立且相同的 32x32 约束
     view.activityIndicatorView = [ADAppearance.sharedInstance activityIndicatorView];
     view.activityIndicatorView.userInteractionEnabled = NO;
     view.activityIndicatorView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -65,9 +65,10 @@
     [view.activityIndicatorView stopAnimating];
     [view addSubview:view.activityIndicatorView];
     
-    // 约束动画绝对居中对齐到图标的中心点
-    [view.activityIndicatorView.centerXAnchor constraintEqualToAnchor:view.actionImageView.centerXAnchor].active = YES;
-    [view.activityIndicatorView.centerYAnchor constraintEqualToAnchor:view.actionImageView.centerYAnchor].active = YES;
+    [view.activityIndicatorView.topAnchor constraintEqualToAnchor:view.topAnchor constant:8].active = YES;
+    [view.activityIndicatorView.centerXAnchor constraintEqualToAnchor:view.centerXAnchor].active = YES;
+    [view.activityIndicatorView.widthAnchor constraintEqualToConstant:32].active = YES;
+    [view.activityIndicatorView.heightAnchor constraintEqualToConstant:32].active = YES;
 
     view.nameLabel = [[UILabel alloc] init];
     view.nameLabel.tag = 2;
@@ -79,7 +80,7 @@
     view.nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
     [view addSubview:view.nameLabel];
     
-    // 【修改点3】：为图标与文字增加 4pt 的固定间距，看着更舒服
+    // 图标与文字增加 4pt 间距
     [view.nameLabel.topAnchor constraintEqualToAnchor:view.actionImageView.bottomAnchor constant:4].active = YES;
     [view.nameLabel.leadingAnchor constraintEqualToAnchor:view.leadingAnchor constant:2].active = YES;
     [view.nameLabel.trailingAnchor constraintEqualToAnchor:view.trailingAnchor constant:-2].active = YES;
