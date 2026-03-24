@@ -76,7 +76,8 @@
     } else if ([iconView respondsToSelector:@selector(_iconImageView)]) {
         _iconImageView = [iconView _iconImageView];
     } else {
-        _iconImageView = object_getIvar(iconView, class_getInstanceVariable(object_getClass(iconView), ["_iconImageView" UTF8String]));
+        // 修正了此处的 C 字符串语法错误
+        _iconImageView = object_getIvar(iconView, class_getInstanceVariable(object_getClass(iconView), "_iconImageView"));
     }
     
     if (!_iconImageView) {
