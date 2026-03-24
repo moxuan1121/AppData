@@ -54,8 +54,8 @@
     // 锁定统一大小为 31x31
     [view.actionImageView.topAnchor constraintEqualToAnchor:view.topAnchor constant:8].active = YES;
     [view.actionImageView.centerXAnchor constraintEqualToAnchor:view.centerXAnchor].active = YES;
-    [view.actionImageView.widthAnchor constraintEqualToConstant:31].active = YES;
-    [view.actionImageView.heightAnchor constraintEqualToConstant:31].active = YES;
+    [view.actionImageView.widthAnchor constraintEqualToConstant:33].active = YES;
+    [view.actionImageView.heightAnchor constraintEqualToConstant:33].active = YES;
 
     // 加载动画
     view.activityIndicatorView = [ADAppearance.sharedInstance activityIndicatorView];
