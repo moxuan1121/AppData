@@ -1,37 +1,19 @@
 #import "Classes/Controller/ADDataViewController.h"
 
-// 声明扩展与代理
+// 声明遵循 UIGestureRecognizerDelegate 协议
 @interface SBIconImageView (AppData) <UIGestureRecognizerDelegate>
-@property (nonatomic, retain) UISwipeGestureRecognizer *adSwipeGestureRecognizer;
-@property (nonatomic, readonly) SBIcon *icon;
-- (void)appDataPreferencesChanged;
 @end
 
-// 声明 iOS 14-16 的底层图标缓存类，解决动画闪回的核心！
-@interface SBHIconImageCache : NSObject
-- (UIImage *)imageForIcon:(SBIcon *)icon;
-- (UIImage *)unmaskedImageForIcon:(SBIcon *)icon;
-@end
+// 声明 iOS 15/16 渲染相关的结构体和接口
+struct SBIconImageInfo {
+    CGSize size;
+    CGFloat scale;
+    CGFloat continuousCornerRadius;
+};
 
-// 统一提取自定义图标的 Helper 方法
-static UIImage *ADGetCustomIconImage(SBIcon *icon) {
-    if (!icon) return nil;
-    NSString *bundleID = nil;
-    if ([icon respondsToSelector:@selector(applicationBundleIdentifier)]) {
-        bundleID = [icon performSelector:@selector(applicationBundleIdentifier)];
-    } else if ([icon respondsToSelector:@selector(applicationBundleID)]) {
-        bundleID = [icon performSelector:@selector(applicationBundleID)];
-    }
-    
-    if (bundleID && [bundleID isKindOfClass:[NSString class]]) {
-        NSString *customPath = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
-        if ([[NSFileManager defaultManager] fileExistsAtPath:customPath]) {
-            UIImage *customImage = [UIImage imageWithContentsOfFile:customPath];
-            if (customImage) return customImage;
-        }
-    }
-    return nil;
-}
+// 修复重复声明：只声明 SBLeafIcon 继承自 Headers.h 中的 SBIcon
+@interface SBLeafIcon : SBIcon
+@end
 
 %group SHARED_HOOKS
 
@@ -42,16 +24,22 @@ static UIImage *ADGetCustomIconImage(SBIcon *icon) {
 %property (nonatomic, retain) UISwipeGestureRecognizer *adSwipeGestureRecognizer;
 
 - (SBIconImageView *)initWithFrame:(CGRect)arg1 {
+    %log;
     SBIconImageView *r = %orig;
     if (![r isKindOfClass:NSClassFromString(@"SBFolderIconImageView")]
         && [r respondsToSelector:@selector(setAdSwipeGestureRecognizer:)]) {
         [[NSNotificationCenter defaultCenter] addObserver:r selector:@selector(appDataPreferencesChanged) name:kAppDataSwipeUpPreferencesChangedNotification object:nil];
         
+        // Create Gesture Recognizer
         self.adSwipeGestureRecognizer = [[UISwipeGestureRecognizer alloc] initWithTarget:r action:@selector(appDataDidSwipeUp:)];
         self.adSwipeGestureRecognizer.direction = (UISwipeGestureRecognizerDirectionUp);
+        
+        // 设置代理，允许手势共存与干预
         self.adSwipeGestureRecognizer.delegate = (id<UIGestureRecognizerDelegate>)r;
         
         r.userInteractionEnabled = YES;
+        
+        // Add gesture if enabled
         [self appDataPreferencesChanged];
     }
     return r;
@@ -69,6 +57,7 @@ static UIImage *ADGetCustomIconImage(SBIcon *icon) {
         }
     }
 
+    // 刷新图标缓存与显示
     if ([self respondsToSelector:@selector(clearCachedImages)]) {
         [self performSelector:@selector(clearCachedImages)];
     }
@@ -78,6 +67,18 @@ static UIImage *ADGetCustomIconImage(SBIcon *icon) {
     if ([self respondsToSelector:@selector(iconImageDidUpdate:)]) {
         [self performSelector:@selector(iconImageDidUpdate:) withObject:nil];
     }
+    if ([self respondsToSelector:@selector(updateImageAnimated:)]) {
+        NSMethodSignature *sig = [self methodSignatureForSelector:@selector(updateImageAnimated:)];
+        if (sig) {
+            NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+            BOOL animated = NO;
+            [inv setSelector:@selector(updateImageAnimated:)];
+            [inv setTarget:self];
+            [inv setArgument:&animated atIndex:2];
+            [inv invoke];
+        }
+    }
+
     [self setNeedsDisplay];
     [self setNeedsLayout];
 }
@@ -89,7 +90,7 @@ static UIImage *ADGetCustomIconImage(SBIcon *icon) {
     }
 }
 
-// 解决手势冲突
+// 智能判断是否允许手势共存，解决多插件重叠触发
 %new
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
     if (gestureRecognizer == self.adSwipeGestureRecognizer) {
@@ -102,6 +103,7 @@ static UIImage *ADGetCustomIconImage(SBIcon *icon) {
     return NO;
 }
 
+// 抢占优先级，强行让其他插件的上滑手势失效
 %new
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldBeRequiredToFailByGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
     if (gestureRecognizer == self.adSwipeGestureRecognizer) {
@@ -115,30 +117,7 @@ static UIImage *ADGetCustomIconImage(SBIcon *icon) {
     return NO;
 }
 
-
-// ==========================================
-// 核心：替换桌面静止状态显示的图标
-// ==========================================
-- (UIImage *)contentsImage {
-    UIImage *custom = ADGetCustomIconImage(self.icon);
-    if (custom) return custom;
-    return %orig;
-}
-
-- (UIImage *)displayedImage {
-    UIImage *custom = ADGetCustomIconImage(self.icon);
-    if (custom) return custom;
-    return %orig;
-}
-
-- (UIImage *)image {
-    UIImage *custom = ADGetCustomIconImage(self.icon);
-    if (custom) return custom;
-    return %orig;
-}
-
-%end // SBIconImageView
-
+%end
 
 #pragma mark - Custom App Icon Name
 
@@ -155,26 +134,70 @@ static UIImage *ADGetCustomIconImage(SBIcon *icon) {
 %end
 
 
-// ==========================================
-// 终极修复：解决打开/关闭 App 动画闪回原版的问题
-// ==========================================
-%hook SBHIconImageCache
+#pragma mark - Custom Icon Replacement (SBLeafIcon)
 
-- (UIImage *)imageForIcon:(SBIcon *)icon {
-    UIImage *custom = ADGetCustomIconImage(icon);
-    if (custom) return custom;
+%hook SBLeafIcon
+
+// 1. 恢复了原本正确的重绘逻辑（带有 UIGraphicsBeginImageContextWithOptions），这保证了修改后图标能【立即生效】
+- (UIImage *)generateIconImageWithInfo:(struct SBIconImageInfo)info {
+    NSString *bundleID = nil;
+    if ([self respondsToSelector:@selector(applicationBundleIdentifier)]) {
+        bundleID = [self performSelector:@selector(applicationBundleIdentifier)];
+    } else if ([self respondsToSelector:@selector(applicationBundleID)]) {
+        bundleID = [self performSelector:@selector(applicationBundleID)];
+    }
+    
+    if (bundleID) {
+        NSString *customIconPath = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
+        
+        if ([[NSFileManager defaultManager] fileExistsAtPath:customIconPath]) {
+            UIImage *customImage = [UIImage imageWithContentsOfFile:customIconPath];
+            if (customImage) {
+                UIGraphicsBeginImageContextWithOptions(info.size, NO, info.scale);
+                UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(0, 0, info.size.width, info.size.height) cornerRadius:info.continuousCornerRadius];
+                [path addClip];
+                [customImage drawInRect:CGRectMake(0, 0, info.size.width, info.size.height)];
+                UIImage *finalIcon = UIGraphicsGetImageFromCurrentImageContext();
+                UIGraphicsEndImageContext();
+                
+                return finalIcon;
+            }
+        }
+    }
     return %orig;
 }
 
-- (UIImage *)unmaskedImageForIcon:(SBIcon *)icon {
-    UIImage *custom = ADGetCustomIconImage(icon);
-    if (custom) return custom;
+// 2. 终极修复：拦截 iOS 14+ 动画引擎请求的“无遮罩”纯净图标，这保证了打开/退出软件时【不再闪回原版图标】
+- (UIImage *)unmaskedIconImageWithInfo:(struct SBIconImageInfo)info {
+    NSString *bundleID = nil;
+    if ([self respondsToSelector:@selector(applicationBundleIdentifier)]) {
+        bundleID = [self performSelector:@selector(applicationBundleIdentifier)];
+    } else if ([self respondsToSelector:@selector(applicationBundleID)]) {
+        bundleID = [self performSelector:@selector(applicationBundleID)];
+    }
+    
+    if (bundleID) {
+        NSString *customIconPath = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
+        
+        if ([[NSFileManager defaultManager] fileExistsAtPath:customIconPath]) {
+            UIImage *customImage = [UIImage imageWithContentsOfFile:customIconPath];
+            if (customImage) {
+                // 无遮罩（unmasked）图像不需要切圆角，但是必须缩放到正确的 size 返回给动画引擎
+                UIGraphicsBeginImageContextWithOptions(info.size, NO, info.scale);
+                [customImage drawInRect:CGRectMake(0, 0, info.size.width, info.size.height)];
+                UIImage *finalIcon = UIGraphicsGetImageFromCurrentImageContext();
+                UIGraphicsEndImageContext();
+                
+                return finalIcon;
+            }
+        }
+    }
     return %orig;
 }
 
-%end // SBHIconImageCache
+%end
 
-%end // SHARED_HOOKS
+%end // 结束 SHARED_HOOKS
 
 
 #pragma mark - ForceTouch Menu
@@ -197,6 +220,7 @@ static UIImage *ADGetCustomIconImage(SBIcon *icon) {
 }
 
 + (void)activateShortcut:(SBSApplicationShortcutItem *)item withBundleIdentifier:(NSString *)bundleID forIconView:(SBIconView *)iconView {
+    NSLog(@"[AppData]: iconView: %@",iconView);
     if ([item.type isEqualToString:kSBApplicationShortcutItemType]) {
         [ADDataViewController presentControllerFromSBIconView:iconView fromContextMenu:YES];
     } else {
