@@ -102,7 +102,7 @@ jobs:
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO DEVELOPMENT_TEAM="" \
             HEADER_SEARCH_PATHS="$(pwd)/vendor/include" \
             FRAMEWORK_SEARCH_PATHS="$(pwd)/vendor/frameworks" \
-            OTHER_LDFLAGS="-lsqlite3 -undefined dynamic_lookup -rpath /Library/Frameworks -rpath /var/jb/Library/Frameworks -rpath @loader_path/.jbroot/Library/Frameworks" \
+            OTHER_LDFLAGS="-undefined dynamic_lookup -rpath /Library/Frameworks -rpath /var/jb/Library/Frameworks -rpath @loader_path/.jbroot/Library/Frameworks" \
             -quiet build
           
           xcodebuild -project AppData.xcodeproj -scheme AppDataPrefs -configuration Release ARCHS="arm64 arm64e" SYMROOT="$(pwd)/build" \
