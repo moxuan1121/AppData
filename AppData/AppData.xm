@@ -23,15 +23,13 @@
         self.adSwipeGestureRecognizer = [[UISwipeGestureRecognizer alloc] initWithTarget:r action:@selector(appDataDidSwipeUp:)];
         self.adSwipeGestureRecognizer.direction = (UISwipeGestureRecognizerDirectionUp);
         
-        // 允许手势共存
+        // 【关键修复】：设置代理，允许手势共存
         self.adSwipeGestureRecognizer.delegate = (id<UIGestureRecognizerDelegate>)r;
         
         r.userInteractionEnabled = YES;
         
         // Add gesture if enabled
         [self appDataPreferencesChanged];
-        
-        NSLog(@"[AppDataDebug] SBIconImageView initWithFrame: Hooked and added swipe gesture to view: %@", r);
     }
     return r;
 }
@@ -41,29 +39,25 @@
     if ([ADSettings swipeUpEnabled]) {
         if (![self.gestureRecognizers containsObject:self.adSwipeGestureRecognizer]) {
             [self addGestureRecognizer:self.adSwipeGestureRecognizer];
-            NSLog(@"[AppDataDebug] appDataPreferencesChanged: Swipe gesture added.");
         }
     } else {
         if ([self.gestureRecognizers containsObject:self.adSwipeGestureRecognizer]) {
             [self removeGestureRecognizer:self.adSwipeGestureRecognizer];
-            NSLog(@"[AppDataDebug] appDataPreferencesChanged: Swipe gesture removed.");
         }
     }
 }
 
 %new
 - (void)appDataDidSwipeUp:(UIGestureRecognizer *)gesture {
-    NSLog(@"[AppDataDebug] appDataDidSwipeUp triggered! Current State: %ld", (long)gesture.state);
     if (gesture.state == UIGestureRecognizerStateEnded) {
-        NSLog(@"[AppDataDebug] Swipe Up Gesture Ended. Attempting to present AppData controller...");
         [ADDataViewController presentControllerFromSBIconImageView:self fromContextMenu:NO];
     }
 }
 
+// 【关键修复】：允许上滑手势与 iOS 15/16+ 原生桌面手势（如长按/滑动列表）共存
 %new
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)otherGestureRecognizer {
     if (gestureRecognizer == self.adSwipeGestureRecognizer) {
-        NSLog(@"[AppDataDebug] shouldRecognizeSimultaneously: Allowing simultaneous gesture with: %@", otherGestureRecognizer);
         return YES;
     }
     return NO;
@@ -107,9 +101,8 @@
 }
 
 + (void)activateShortcut:(SBSApplicationShortcutItem *)item withBundleIdentifier:(NSString *)bundleID forIconView:(SBIconView *)iconView {
-    NSLog(@"[AppDataDebug] activateShortcut triggered. Item type: %@, bundleID: %@", item.type, bundleID);
+    NSLog(@"[AppData]: iconView: %@",iconView);
     if ([item.type isEqualToString:kSBApplicationShortcutItemType]) {
-        NSLog(@"[AppDataDebug] activateShortcut: Valid AppData shortcut item. Presenting...");
         [ADDataViewController presentControllerFromSBIconView:iconView fromContextMenu:YES];
     } else {
         %orig;
@@ -139,7 +132,7 @@
     return %orig;
 }
 
-// iOS 14+
+// iOS 14
 - (NSUInteger)sbh_shortcutSection {
     if ([self respondsToSelector:@selector(type)]
         && [self.type respondsToSelector:@selector(isEqualToString:)]
@@ -179,8 +172,6 @@
         [self dismissAnimated:YES withCompletionHandler:nil];
         SBUIAppIconForceTouchControllerDataProvider* _dataProvider = [self valueForKey:@"_dataProvider"];
         SBIconView *iconView = (SBIconView *)_dataProvider.gestureRecognizer.view;
-        
-        NSLog(@"[AppDataDebug] IOS12 activateApplicationShortcutItem. Presenting...");
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
             [ADDataViewController presentControllerFromSBIconView:iconView fromContextMenu:YES];
         });
@@ -201,5 +192,4 @@
     } else {
         %init(IOS12_AND_OLDER_HOOKS);
     }
-    NSLog(@"[AppDataDebug] AppData Constructor Initialized");
 }
