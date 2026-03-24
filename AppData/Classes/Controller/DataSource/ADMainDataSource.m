@@ -12,6 +12,19 @@
 #import "ADTitleSectionHeaderView.h"
 #import <dlfcn.h> // 需要引入 dlfcn.h 供动态加载私有库
 
+// --- 新增：声明私有类接口，避免 performSelector 返回 BOOL 时产生的 0x1 野指针崩溃 ---
+@interface SSAccount : NSObject
+- (BOOL)isActive;
+- (BOOL)isLocalAccount;
+- (NSString *)accountName;
+@end
+
+@interface SSAccountStore : NSObject
++ (id)defaultStore;
+- (NSArray *)accounts;
+@end
+// -------------------------------------------------------------------------
+
 @implementation ADMainDataSource
 
 - (instancetype)initWithAppData:(ADAppData *)data dataViewController:(ADDataViewController *)dataViewController {
@@ -213,17 +226,20 @@
                         dlopen("/System/Library/PrivateFrameworks/StoreServices.framework/StoreServices", RTLD_LAZY);
                         Class SSAccountStoreClass = NSClassFromString(@"SSAccountStore");
                         NSString *activeAccountEmail = @"未登录";
+                        
+                        // === 修复的核心代码：改用声明接口直接调用，避免 EXC_BAD_ACCESS ===
                         if (SSAccountStoreClass) {
-                            id store = [SSAccountStoreClass performSelector:@selector(defaultStore)];
-                            NSArray *accounts = [store performSelector:@selector(accounts)];
-                            for (id account in accounts) {
-                                if ([[account performSelector:@selector(isActive)] boolValue] && ![[account performSelector:@selector(isLocalAccount)] boolValue]) {
-                                    NSString *accName = [account performSelector:@selector(accountName)];
+                            SSAccountStore *store = [SSAccountStoreClass defaultStore];
+                            NSArray *accounts = [store accounts];
+                            for (SSAccount *account in accounts) {
+                                if ([account isActive] && ![account isLocalAccount]) {
+                                    NSString *accName = [account accountName];
                                     if (accName) activeAccountEmail = accName;
                                     break;
                                 }
                             }
                         }
+                        // ==========================================================
                         
                         // 判断是否匹配（忽略大小写）
                         BOOL isVerified = ([activeAccountEmail caseInsensitiveCompare:purchaserAccountEmail] == NSOrderedSame);
