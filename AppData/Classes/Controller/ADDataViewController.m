@@ -69,13 +69,16 @@
         return;
     }
     
-    // Find Icon Image View
+    // Find Icon Image View (iOS 15/16+ 兼容)
     SBIconImageView *_iconImageView = nil;
-    if ([iconView respondsToSelector:@selector(_iconImageView)]) {
+    if ([iconView respondsToSelector:@selector(iconImageView)]) {
+        _iconImageView = [iconView performSelector:@selector(iconImageView)];
+    } else if ([iconView respondsToSelector:@selector(_iconImageView)]) {
         _iconImageView = [iconView _iconImageView];
     } else {
-        _iconImageView = object_getIvar(iconView, class_getInstanceVariable(object_getClass(iconView), [@"_iconImageView" UTF8String]));
+        _iconImageView = object_getIvar(iconView, class_getInstanceVariable(object_getClass(iconView), ["_iconImageView" UTF8String]));
     }
+    
     if (!_iconImageView) {
         for (UIView *subview in iconView.subviews) {
             if ([subview isKindOfClass:NSClassFromString(@"SBIconImageView")]) {
@@ -108,12 +111,41 @@
 + (void)presentControllerFromSBIconImageView:(SBIconImageView *)iconImageView iconView:(SBIconView *)iconView fromContextMenu:(BOOL)contextMenu {
     NSLog(@"iconImageView: %@",iconImageView);
     
-    UIViewController *rootController = [iconImageView _viewControllerForAncestor];
+    // 获取 RootController，增强 iOS 15/16 兼容性
+    UIViewController *rootController = nil;
+    if ([iconImageView respondsToSelector:@selector(_viewControllerForAncestor)]) {
+        rootController = [iconImageView _viewControllerForAncestor];
+    } else if ([iconView respondsToSelector:@selector(_viewControllerForAncestor)]) {
+        rootController = [iconView _viewControllerForAncestor];
+    }
+    
+    // Fallback 到 window root controller
+    if (!rootController) {
+        UIWindow *window = iconView.window;
+        if (!window) window = [UIApplication sharedApplication].keyWindow;
+        rootController = window.rootViewController;
+        while (rootController.presentedViewController) {
+            rootController = rootController.presentedViewController;
+        }
+    }
+    
     NSLog(@"rootController: %@",rootController);
     
-    if ([iconView respondsToSelector:@selector(icon)] && [iconView.icon respondsToSelector:@selector(applicationBundleID)] && [iconImageView respondsToSelector:@selector(contentsImage)]) {
+    // iOS 15+ 兼容新的 BundleID 提取逻辑
+    if ([iconView respondsToSelector:@selector(icon)] && [iconImageView respondsToSelector:@selector(contentsImage)]) {
         SBIcon *icon = iconView.icon;
-        NSString *bundleID = icon.applicationBundleID;
+        NSString *bundleID = nil;
+        if ([icon respondsToSelector:@selector(applicationBundleIdentifier)]) {
+            bundleID = [icon performSelector:@selector(applicationBundleIdentifier)];
+        } else if ([icon respondsToSelector:@selector(applicationBundleID)]) {
+            bundleID = [icon performSelector:@selector(applicationBundleID)];
+        }
+        
+        if (!bundleID) {
+            [self showAlertFromViewController:rootController title:@"AppData" message:@"Could not fetch bundle ID." cancelTitle:@"Okay"];
+            return;
+        }
+        
         ADAppData *appData = [ADAppData appDataForBundleIdentifier:bundleID iconImage:iconImageView.contentsImage];
         if (appData) {
             appData.iconView = iconView;
