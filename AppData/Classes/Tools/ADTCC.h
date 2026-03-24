@@ -8,10 +8,12 @@
 #ifndef ADTCC_h
 #define ADTCC_h
 
+#import <Foundation/Foundation.h>
+
 FOUNDATION_EXTERN NSString *const kTCCServiceAll;
 
-FOUNDATION_EXTERN int TCCAccessResetForBundle(NSString *service, CFBundleRef bundle);
+// 修改为直接传入 Bundle Identifier，摒弃旧的 CFBundleRef
+FOUNDATION_EXTERN int TCCAccessResetForBundleIdentifier(NSString *service, NSString *bundleIdentifier);
+FOUNDATION_EXTERN NSArray<NSDictionary *> *TCCAccessCopyInformationForBundleIdentifier(NSString *bundleIdentifier);
 
-FOUNDATION_EXTERN NSArray<NSDictionary *> *TCCAccessCopyInformationForBundle(CFBundleRef bundle);
-
-#endif /* TCC_h */
+#endif /* ADTCC_h */
