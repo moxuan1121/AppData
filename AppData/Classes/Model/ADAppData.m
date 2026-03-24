@@ -70,7 +70,7 @@
         self.appStoreVendable = self.appProxy.isAppStoreVendable;
     }
     
-    // Deletable (真实可卸载状态判断)
+    // Deletable (真实可卸载状态判断，支持巨魔)
     if ([self.appProxy respondsToSelector:@selector(isDeletable)]) {
         self.isDeletable = self.appProxy.isDeletable;
     } else {
@@ -273,10 +273,15 @@
 }
 
 #pragma mark - Permissions
-
+// 还原：这里回退为了原版基于 CFBundleRef 的代码
 - (NSArray <NSDictionary *> *)getPermissions {
-    // 使用适配了 iOS 15+ 的 TCC 接口，传入 bundleIdentifier 即可
-    return TCCAccessCopyInformationForBundleIdentifier(self.bundleIdentifier);
+    CFBundleRef bundle = CFBundleCreate(kCFAllocatorDefault, (CFURLRef)self.appProxy.bundleURL);
+    if (bundle) {
+        NSArray *information = TCCAccessCopyInformationForBundle(bundle);
+        CFRelease(bundle);
+        return information;
+    }
+    return nil;
 }
 
 - (void)resetAllAppPermissions {
@@ -290,8 +295,11 @@
 }
 
 - (void)_resetAllAppPermissions {
-    // 使用适配了 iOS 15+ 的 TCC 接口进行重置
-    TCCAccessResetForBundleIdentifier(@"kTCCServiceAll", self.bundleIdentifier);
+    CFBundleRef bundle = CFBundleCreate(kCFAllocatorDefault, (CFURLRef)self.appProxy.bundleURL);
+    if (bundle) {
+        TCCAccessResetForBundle(kTCCServiceAll, bundle);
+        CFRelease(bundle);
+    }
     
     // Reset location permission
     [CLLocationManager setAuthorizationStatusByType:kCLAuthorizationStatusNotDetermined forBundleIdentifier:self.bundleIdentifier];
@@ -362,8 +370,7 @@
             [[NSFileManager defaultManager] createDirectoryAtURL:[[self appLibraryDirectoryURL] URLByAppendingPathComponent:@"Preferences" isDirectory:YES] withIntermediateDirectories:YES attributes:nil error:NULL];
         }
         
-        // Reset all permissions
-        // 根据真实的应用状态决定，放开了原有的 appStoreVendable 限制
+        // Reset all permissions (这里保留我们修改过的 isApplication 逻辑)
         if (self.isApplication) {
             [self _resetAllAppPermissions];
         }
@@ -379,7 +386,7 @@
 }
 
 #pragma mark - Uninstall App
-
+// 这里的卸载逻辑保留了我们改写的彻底卸载
 - (void)uninstallAppWithCompletion:(void(^)(BOOL success))completion {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         BOOL result = NO;
