@@ -6,6 +6,11 @@
 //
 
 #import "ADHelper.h"
+#import <dlfcn.h>
+
+#if __has_include(<rootless.h>)
+#import <rootless.h>
+#endif
 
 @interface ADHelper ()
 @property (nonatomic, strong) NSBundle *resoucesBundle;
@@ -13,13 +18,51 @@
 
 @implementation ADHelper
 
+static NSString *ADCompatiblePath(NSString *rootRelativePath) {
+#if __has_include(<rootless.h>)
+    return JBROOT_PATH_NSSTRING(rootRelativePath);
+#else
+    NSString *rootfulPath = rootRelativePath;
+    NSString *rootlessPath = [@"/var/jb" stringByAppendingString:rootRelativePath];
+
+    Dl_info info = {0};
+    if (dladdr((const void *)&ADCompatiblePath, &info) && info.dli_fname) {
+        NSString *imagePath = [NSString stringWithUTF8String:info.dli_fname];
+
+        NSArray<NSString *> *markers = @[
+            @"/Library/MobileSubstrate/",
+            @"/usr/lib/TweakInject/",
+            @"/Library/PreferenceBundles/",
+            @"/Library/Application Support/"
+        ];
+
+        for (NSString *marker in markers) {
+            NSRange range = [imagePath rangeOfString:marker];
+            if (range.location != NSNotFound) {
+                NSString *jbRoot = [imagePath substringToIndex:range.location];
+                if (jbRoot.length > 0) {
+                    return [jbRoot stringByAppendingString:rootRelativePath];
+                }
+                break;
+            }
+        }
+    }
+
+    if ([[NSFileManager defaultManager] fileExistsAtPath:rootlessPath]) {
+        return rootlessPath;
+    }
+
+    return rootfulPath;
+#endif
+}
+
 + (instancetype)sharedInstance {
     static dispatch_once_t p = 0;
     __strong static ADHelper *_sharedInstance = nil;
     dispatch_once(&p, ^{
         _sharedInstance = [[self alloc] init];
         // Create resources bundle
-        _sharedInstance.resoucesBundle = [NSBundle bundleWithPath:@"/Library/Application Support/AppData/Resources.bundle"];
+        _sharedInstance.resoucesBundle = [NSBundle bundleWithPath:ADCompatiblePath(@"/Library/Application Support/AppData/Resources.bundle")];
     });
     return _sharedInstance;
 }
