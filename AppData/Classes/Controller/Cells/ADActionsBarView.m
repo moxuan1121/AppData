@@ -51,13 +51,13 @@
     view.actionImageView.translatesAutoresizingMaskIntoConstraints = NO;
     [view addSubview:view.actionImageView];
 
-    // 【修改为 31x31】
+    // 锁定统一大小为 31x31
     [view.actionImageView.topAnchor constraintEqualToAnchor:view.topAnchor constant:8].active = YES;
     [view.actionImageView.centerXAnchor constraintEqualToAnchor:view.centerXAnchor].active = YES;
     [view.actionImageView.widthAnchor constraintEqualToConstant:31].active = YES;
     [view.actionImageView.heightAnchor constraintEqualToConstant:31].active = YES;
 
-    // 【加载动画也修改为 31x31，并与图标重叠居中】
+    // 加载动画
     view.activityIndicatorView = [ADAppearance.sharedInstance activityIndicatorView];
     view.activityIndicatorView.userInteractionEnabled = NO;
     view.activityIndicatorView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -75,7 +75,12 @@
     view.nameLabel.userInteractionEnabled = NO;
     view.nameLabel.textAlignment = NSTextAlignmentCenter;
     view.nameLabel.font = [UIFont systemFontOfSize:11];
-    view.nameLabel.numberOfLines = 2;
+    
+    // 【修改点：强制单行显示，并且自动缩小字体防止越界】
+    view.nameLabel.numberOfLines = 1;
+    view.nameLabel.adjustsFontSizeToFitWidth = YES;
+    view.nameLabel.minimumScaleFactor = 0.8;
+    
     [view.nameLabel setText:title];
     view.nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
     [view addSubview:view.nameLabel];
@@ -167,6 +172,7 @@
 }
 
 @end
+
 
 @implementation ADActionButton
 
