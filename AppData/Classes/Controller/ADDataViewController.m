@@ -311,19 +311,35 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
 }
 
 - (void)dismissAppDataControllerAnimated:(BOOL)animated completion:(void(^)(void))completion {
-    if (self.dockDismissed) {
-        self.dockDismissed = NO;
-        [self.class presentFloatingDockIfNeeded];
-    }
-    
-    // ================= 新增：恢复桌面滑动 =================
-    if (self.desktopScrollView) {
-        self.desktopScrollView.scrollEnabled = YES;
-    }
-    // ====================================================
-    
+    // 恢复逻辑已经转移到下方生命周期中，这里只需负责关闭 Controller
     [self dismissViewControllerAnimated:animated completion:completion];
 }
+
+// ================= 核心修复：利用生命周期自动恢复防滑与 Dock =================
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    
+    // isBeingDismissed 判断确保：只有在面板真正被关闭时才恢复。
+    // 如果是从面板弹出相册选取图片，不触发恢复。
+    if (self.isBeingDismissed) {
+        if (self.dockDismissed) {
+            self.dockDismissed = NO;
+            [self.class presentFloatingDockIfNeeded];
+        }
+        
+        if (self.desktopScrollView) {
+            self.desktopScrollView.scrollEnabled = YES;
+        }
+    }
+}
+
+- (void)dealloc {
+    // 兜底保障：当应用进入后台 SpringBoard 直接回收内存强制销毁时，强制恢复桌面滑动
+    if (_desktopScrollView) {
+        _desktopScrollView.scrollEnabled = YES;
+    }
+}
+// =======================================================================
 
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations {
     return UIInterfaceOrientationMaskPortrait;
