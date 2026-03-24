@@ -71,7 +71,7 @@
             cell.textLabel.text = @"内部版本号";
             cell.detailTextLabel.text = [NSString stringWithFormat:@"%@",self.appData.internalVersion];
         } else if (indexPath.row == 1) {
-            cell.textLabel.text = @"最低 iOS 版本";
+            cell.textLabel.text = @"最低支持 iOS 版本";
             cell.detailTextLabel.text = [NSString stringWithFormat:@"%@",self.appData.minimumOSVersion];
         } else if (indexPath.row == 2) {
             cell.textLabel.text = @"平台编译版本";
