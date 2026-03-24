@@ -17,7 +17,7 @@
 #define IS_IPAD (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad)
 #endif
 
-@interface ADDataViewController () <UIGestureRecognizerDelegate>
+@interface ADDataViewController () <UIGestureRecognizerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate>
 
 @property (nonatomic, strong) ADDataPresentationManager *presentationManager;
 
@@ -104,7 +104,7 @@
 + (void)presentControllerFromSBIconImageView:(SBIconImageView *)iconImageView fromContextMenu:(BOOL)contextMenu {
     SBIconView *iconView = (SBIconView *)[iconImageView superview];
     if (![iconView respondsToSelector:@selector(icon)]) {
-        NSLog(@"iconView: %@",iconView);
+        NSLog(@"iconView: %@", iconView);
         iconView = (SBIconView *)[iconView superview];
     }
     [self presentControllerFromSBIconImageView:iconImageView iconView:iconView fromContextMenu:contextMenu];
@@ -113,7 +113,7 @@
 #pragma mark - Internal
 
 + (void)presentControllerFromSBIconImageView:(SBIconImageView *)iconImageView iconView:(SBIconView *)iconView fromContextMenu:(BOOL)contextMenu {
-    NSLog(@"iconImageView: %@",iconImageView);
+    NSLog(@"iconImageView: %@", iconImageView);
     
     // 获取 RootController，增强 iOS 15/16 兼容性
     UIViewController *rootController = nil;
@@ -133,7 +133,7 @@
         }
     }
     
-    NSLog(@"rootController: %@",rootController);
+    NSLog(@"rootController: %@", rootController);
     
     // iOS 15+ 兼容新的 BundleID 提取逻辑
     if ([iconView respondsToSelector:@selector(icon)] && [iconImageView respondsToSelector:@selector(contentsImage)]) {
@@ -182,7 +182,7 @@
     } else {
         [self showAlertFromViewController:rootController
                                     title:@"AppData"
-                                  message:[NSString stringWithFormat:@"Could not fetch app data.\n\n%@ is not a valid icon class.",[iconView class]]
+                                  message:[NSString stringWithFormat:@"Could not fetch app data.\n\n%@ is not a valid icon class.", [iconView class]]
                               cancelTitle:@"Okay"];
     }
 }
@@ -193,6 +193,7 @@
     
     UITapGestureRecognizer *tapGesture = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(dismiss)];
     tapGesture.delegate = self;
+    tapGesture.cancelsTouchesInView = NO;
     [self.view addGestureRecognizer:tapGesture];
     
     UISwipeGestureRecognizer *swipeUpDownGesture = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(dismiss)];
@@ -216,7 +217,7 @@
     [self dismissAppDataControllerAnimated:YES completion:nil];
 }
 
-- (void)dismissAppDataControllerAnimated:(BOOL)animated completion:(void(^)())completion {
+- (void)dismissAppDataControllerAnimated:(BOOL)animated completion:(void(^)(void))completion {
     if (self.dockDismissed) {
         self.dockDismissed = NO;
         [self.class presentFloatingDockIfNeeded];
@@ -229,9 +230,16 @@
 }
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
-    if ([touch.view isKindOfClass:NSClassFromString(@"UITableViewCellContentView")]) {
+    UIView *touchedView = touch.view;
+    
+    if ([touchedView isKindOfClass:NSClassFromString(@"UITableViewCellContentView")]) {
         return NO;
     }
+    
+    if ([touchedView isKindOfClass:[UIButton class]] || [touchedView isDescendantOfView:self.contentView]) {
+        return NO;
+    }
+    
     return YES;
 }
 
@@ -249,10 +257,10 @@
     
     if ([self.appData isApplication]) {
         NSString *customIconName = self.appData.customIconName;
-        [self.nameLabel setTitle:customIconName?:self.appData.name forState:UIControlStateNormal];
+        [self.nameLabel setTitle:customIconName ?: self.appData.name forState:UIControlStateNormal];
         [self.identifierLabel setTitle:self.appData.bundleIdentifier forState:UIControlStateNormal];
         if (self.appData.diskUsage > 0 && self.appData.diskUsageString) {
-            self.versionLabel.text = [self.appData.version stringByAppendingFormat:@"  —  %@",self.appData.diskUsageString];
+            self.versionLabel.text = [self.appData.version stringByAppendingFormat:@"  —  %@", self.appData.diskUsageString];
         } else {
             self.versionLabel.text = self.appData.version;
         }
@@ -308,6 +316,7 @@
     [self.appStoreButton.widthAnchor constraintEqualToConstant:30].active = YES;
     
     self.iconImageView = [[UIImageView alloc] init];
+    self.iconImageView.userInteractionEnabled = NO;
     [self.iconImageView setTranslatesAutoresizingMaskIntoConstraints:NO];
     [containerView addSubview:self.iconImageView];
     [self.iconImageView.leadingAnchor constraintEqualToAnchor:containerView.leadingAnchor constant:15].active = YES;
@@ -315,17 +324,16 @@
     [self.iconImageView.widthAnchor constraintEqualToConstant:58].active = YES;
     [self.iconImageView.heightAnchor constraintEqualToConstant:58].active = YES;
 
-    // =========== 核心修复：添加透明 UIButton 覆盖在图标上方接收点击 ===========
     UIButton *iconButton = [UIButton buttonWithType:UIButtonTypeCustom];
     iconButton.translatesAutoresizingMaskIntoConstraints = NO;
+    iconButton.backgroundColor = [UIColor clearColor];
     [iconButton addTarget:self action:@selector(didTapIconImageView:) forControlEvents:UIControlEventTouchUpInside];
     [containerView addSubview:iconButton];
     [iconButton.leadingAnchor constraintEqualToAnchor:self.iconImageView.leadingAnchor].active = YES;
     [iconButton.topAnchor constraintEqualToAnchor:self.iconImageView.topAnchor].active = YES;
     [iconButton.widthAnchor constraintEqualToAnchor:self.iconImageView.widthAnchor].active = YES;
     [iconButton.heightAnchor constraintEqualToAnchor:self.iconImageView.heightAnchor].active = YES;
-    // ====================================================================
-
+    
     self.nameLabel = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.nameLabel addTarget:self action:@selector(didTapNameButton:) forControlEvents:UIControlEventTouchUpInside];
     self.nameLabel.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
@@ -337,7 +345,7 @@
     [self.nameLabel.topAnchor constraintEqualToAnchor:containerView.topAnchor constant:15].active = YES;
     [self.nameLabel.leadingAnchor constraintEqualToAnchor:self.iconImageView.trailingAnchor constant:11].active = YES;
     [self.nameLabel.heightAnchor constraintEqualToConstant:22].active = YES;
-    [self.nameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.appStoreButton.leadingAnchor constant:- (22 + 11)].active = YES;
+    [self.nameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.appStoreButton.leadingAnchor constant:-(22 + 11)].active = YES;
     
     UIImage *nameEditImage = nil;
     if (@available(iOS 13.0, *)) {
@@ -367,7 +375,7 @@
     [self.identifierLabel.topAnchor constraintEqualToAnchor:self.nameLabel.bottomAnchor constant:2].active = YES;
     [self.identifierLabel.leadingAnchor constraintEqualToAnchor:self.iconImageView.trailingAnchor constant:11].active = YES;
     [self.identifierLabel.heightAnchor constraintEqualToConstant:20.16].active = YES;
-    [self.identifierLabel.trailingAnchor constraintLessThanOrEqualToAnchor:containerView.trailingAnchor constant:- (22 + 11)].active = YES;
+    [self.identifierLabel.trailingAnchor constraintLessThanOrEqualToAnchor:containerView.trailingAnchor constant:-(22 + 11)].active = YES;
 
     UIImage *clipboardImage = nil;
     if (@available(iOS 13.0, *)) {
@@ -432,6 +440,7 @@
 }
 
 - (void)traitCollectionDidChange:(UITraitCollection *)collection {
+    [super traitCollectionDidChange:collection];
     [self.tableView reloadData];
     [self.moreTableView reloadData];
 }
@@ -464,7 +473,7 @@
         self.isCopyingIdentifier = YES;
         
         NSString *currentTitle = self.identifierLabel.titleLabel.text;
-        [[UIPasteboard generalPasteboard] setString:currentTitle?:@""];
+        [[UIPasteboard generalPasteboard] setString:currentTitle ?: @""];
         
         [self.identifierLabel setTitle:@"Copied to clipboard" forState:UIControlStateNormal];
         
@@ -511,6 +520,9 @@
         self.dockDismissed = [self.class dismissFloatingDockIfNeededWithCompletion:^{
             [self presentViewController:alertController animated:YES completion:nil];
         }];
+        if (!self.dockDismissed) {
+            [self presentViewController:alertController animated:YES completion:nil];
+        }
     } else {
         [self presentViewController:alertController animated:YES completion:nil];
     }
@@ -569,9 +581,10 @@
     return nil;
 }
 
-+ (BOOL)dismissFloatingDockIfNeededWithCompletion:(void(^)())completion {
++ (BOOL)dismissFloatingDockIfNeededWithCompletion:(void(^)(void))completion {
     SBFloatingDockController *dockController = [self floatingDockController];
-    if ([dockController respondsToSelector:@selector(_dismissFloatingDockIfPresentedAnimated:completionHandler:)] && [dockController respondsToSelector:@selector(isFloatingDockPresented)]) {
+    if ([dockController respondsToSelector:@selector(_dismissFloatingDockIfPresentedAnimated:completionHandler:)] &&
+        [dockController respondsToSelector:@selector(isFloatingDockPresented)]) {
         if ([dockController isFloatingDockPresented]) {
             [dockController _dismissFloatingDockIfPresentedAnimated:YES completionHandler:completion];
             return YES;
@@ -582,10 +595,10 @@
 
 + (void)presentFloatingDockIfNeeded {
     SBFloatingDockController *dockController = [self floatingDockController];
-    if ([dockController respondsToSelector:@selector(_dismissFloatingDockIfPresentedAnimated:completionHandler:)]
-        && [dockController respondsToSelector:@selector(isFloatingDockPresented)]) {
+    if ([dockController respondsToSelector:@selector(_dismissFloatingDockIfPresentedAnimated:completionHandler:)] &&
+        [dockController respondsToSelector:@selector(isFloatingDockPresented)]) {
         if (![dockController isFloatingDockPresented]) {
-            [dockController _presentFloatingDockIfDismissedAnimated:YES completionHandler:^{ }];
+            [dockController _presentFloatingDockIfDismissedAnimated:YES completionHandler:^{}];
         }
     }
 }
@@ -599,51 +612,70 @@
 + (void)showAlertFromViewController:(UIViewController *)viewController title:(NSString *)title message:(NSString *)message cancelTitle:(NSString *)cancelTitle {
     UIAlertController *alertController = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
     [alertController addAction:[UIAlertAction actionWithTitle:cancelTitle style:UIAlertActionStyleCancel handler:nil]];
-    [viewController?:[UIApplication sharedApplication].keyWindow.rootViewController presentViewController:alertController animated:YES completion:nil];
+    [viewController ?: [UIApplication sharedApplication].keyWindow.rootViewController presentViewController:alertController animated:YES completion:nil];
 }
 
-
-#pragma mark - Custom Icon Replacement (新增功能模块)
+#pragma mark - Custom Icon Replacement
 
 - (void)didTapIconImageView:(id)sender {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"更换桌面图标" message:@"选择一张图片替换当前App在桌面上的图标缓存（不修改原App文件）" preferredStyle:UIAlertControllerStyleActionSheet];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"更换桌面图标"
+                                                                   message:@"选择一张图片替换当前App在桌面上的图标缓存（不修改原App文件）"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"从相册选择" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"从相册选择"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction * _Nonnull action) {
         UIImagePickerController *picker = [[UIImagePickerController alloc] init];
-        picker.delegate = (id<UIImagePickerControllerDelegate, UINavigationControllerDelegate>)self;
+        picker.delegate = self;
         picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
         picker.allowsEditing = YES;
         [self presentViewController:picker animated:YES completion:nil];
     }]];
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"恢复默认图标" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"恢复默认图标"
+                                              style:UIAlertActionStyleDestructive
+                                            handler:^(UIAlertAction * _Nonnull action) {
         [self resetCustomIcon];
     }]];
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
 
     if (IS_IPAD) {
         alert.popoverPresentationController.sourceView = self.iconImageView;
         alert.popoverPresentationController.sourceRect = self.iconImageView.bounds;
     }
 
-    self.dockDismissed = [self.class dismissFloatingDockIfNeededWithCompletion:^{
+    BOOL dismissed = [self.class dismissFloatingDockIfNeededWithCompletion:^{
         [self presentViewController:alert animated:YES completion:nil];
     }];
+    self.dockDismissed = dismissed;
+
+    if (!dismissed) {
+        [self presentViewController:alert animated:YES completion:nil];
+    }
 }
 
 - (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<NSString *,id> *)info {
     [picker dismissViewControllerAnimated:YES completion:nil];
-    UIImage *image = info[UIImagePickerControllerEditedImage] ? : info[UIImagePickerControllerOriginalImage];
+    
+    UIImage *image = info[UIImagePickerControllerEditedImage] ?: info[UIImagePickerControllerOriginalImage];
     if (image) {
         [self saveCustomIcon:image];
     }
-    if (self.dockDismissed && IS_IPAD) [self.class presentFloatingDockIfNeeded];
+    
+    if (self.dockDismissed && IS_IPAD) {
+        [self.class presentFloatingDockIfNeeded];
+    }
 }
 
 - (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
     [picker dismissViewControllerAnimated:YES completion:nil];
-    if (self.dockDismissed && IS_IPAD) [self.class presentFloatingDockIfNeeded];
+    
+    if (self.dockDismissed && IS_IPAD) {
+        [self.class presentFloatingDockIfNeeded];
+    }
 }
 
 - (void)saveCustomIcon:(UIImage *)image {
@@ -652,8 +684,12 @@
 
     NSString *dirPath = @"/var/mobile/Library/Preferences/AppDataIcons";
     if (![[NSFileManager defaultManager] fileExistsAtPath:dirPath]) {
-        [[NSFileManager defaultManager] createDirectoryAtPath:dirPath withIntermediateDirectories:YES attributes:nil error:nil];
+        [[NSFileManager defaultManager] createDirectoryAtPath:dirPath
+                                  withIntermediateDirectories:YES
+                                                   attributes:nil
+                                                        error:nil];
     }
+    
     NSString *path = [dirPath stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.png", bundleID]];
     [UIImagePNGRepresentation(image) writeToFile:path atomically:YES];
 
@@ -683,11 +719,10 @@
         self.iconImageView.image = self.appData.iconImage;
     }
 
-    // 2. 核心：通知 SpringBoard 重绘该 App 图标缓存
+    // 2. 通知 SpringBoard 重绘该 App 图标缓存
     if (self.appData.iconView && [self.appData.iconView respondsToSelector:@selector(icon)]) {
         id sbIcon = [self.appData.iconView performSelector:@selector(icon)];
         if ([sbIcon respondsToSelector:@selector(iconImageDidUpdate:)]) {
-            // 触发桌面更新
             [sbIcon performSelector:@selector(iconImageDidUpdate:) withObject:nil];
         }
     }
