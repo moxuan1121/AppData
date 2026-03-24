@@ -36,8 +36,8 @@ jobs:
           echo -e '#!/bin/bash\nexit 0' > /opt/MonkeyDev/bin/md
           chmod +x /opt/MonkeyDev/bin/md
           
-          # 3. 伪造 Substrate 动态库骗过 Linker，追加 -install_name 映射到真实路径
-          echo "" | clang -dynamiclib -arch arm64 -arch arm64e -isysroot "$IOS_SDK" -install_name /Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate -o /opt/MonkeyDev/frameworks/libsubstrate.dylib -x c -
+          # 3. 伪造 Substrate 动态库骗过 Linker，改为 @rpath 以兼容 Rootful / Rootless / RootHide
+          echo "" | clang -dynamiclib -arch arm64 -arch arm64e -isysroot "$IOS_SDK" -install_name @rpath/CydiaSubstrate.framework/CydiaSubstrate -o /opt/MonkeyDev/frameworks/libsubstrate.dylib -x c -
           
           # 4. 重写 Prefix.pch，注入 ObjC Runtime 底层支持和 HBLogDebug 宏
           cat << 'EOF' > /opt/theos/Prefix.pch
@@ -68,9 +68,9 @@ jobs:
           #endif
           EOF
 
-          # 6. 伪造 CydiaSubstrate 框架结构，追加 -install_name 映射到越狱机真实路径
+          # 6. 伪造 CydiaSubstrate 框架结构，改为 @rpath 以兼容 Rootful / Rootless / RootHide
           mkdir -p vendor/frameworks/CydiaSubstrate.framework
-          echo "" | clang -dynamiclib -arch arm64 -arch arm64e -isysroot "$IOS_SDK" -install_name /Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate -o vendor/frameworks/CydiaSubstrate.framework/CydiaSubstrate -x c -
+          echo "" | clang -dynamiclib -arch arm64 -arch arm64e -isysroot "$IOS_SDK" -install_name @rpath/CydiaSubstrate.framework/CydiaSubstrate -o vendor/frameworks/CydiaSubstrate.framework/CydiaSubstrate -x c -
           
           # 7. 伪造 Apple 私有 Preferences 框架结构，追加 -install_name 映射到 iOS 真实系统私有库路径
           mkdir -p vendor/frameworks/Preferences.framework
@@ -102,14 +102,14 @@ jobs:
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO DEVELOPMENT_TEAM="" \
             HEADER_SEARCH_PATHS="$(pwd)/vendor/include" \
             FRAMEWORK_SEARCH_PATHS="$(pwd)/vendor/frameworks" \
-            OTHER_LDFLAGS="-undefined dynamic_lookup" \
+            OTHER_LDFLAGS="-undefined dynamic_lookup -rpath /Library/Frameworks -rpath /var/jb/Library/Frameworks -rpath @loader_path/.jbroot/Library/Frameworks" \
             -quiet build
           
           xcodebuild -project AppData.xcodeproj -scheme AppDataPrefs -configuration Release ARCHS="arm64 arm64e" SYMROOT="$(pwd)/build" \
             CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO DEVELOPMENT_TEAM="" \
             HEADER_SEARCH_PATHS="$(pwd)/vendor/include" \
             FRAMEWORK_SEARCH_PATHS="$(pwd)/vendor/frameworks" \
-            OTHER_LDFLAGS="-undefined dynamic_lookup" \
+            OTHER_LDFLAGS="-undefined dynamic_lookup -rpath /Library/Frameworks -rpath /var/jb/Library/Frameworks -rpath @loader_path/.jbroot/Library/Frameworks" \
             -quiet build
 
       - name: Pseudo-sign Binaries (ldid)
@@ -139,7 +139,7 @@ jobs:
           # 修正 Rootless 架构
           sed -i '' 's/Architecture: iphoneos-arm/Architecture: iphoneos-arm64/g' Package_Rootless/DEBIAN/control
           
-          # 迁移文件路径适配 Rootless
+          # 迁移文件路径适配 Rootless / RootHide
           mkdir -p Package_Rootless/var/jb
           mv Package_Rootless/Library Package_Rootless/var/jb/
           
