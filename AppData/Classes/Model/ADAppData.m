@@ -70,11 +70,11 @@
         self.appStoreVendable = self.appProxy.isAppStoreVendable;
     }
     
-    // Deletable
+    // Deletable (真实可卸载状态判断)
     if ([self.appProxy respondsToSelector:@selector(isDeletable)]) {
         self.isDeletable = self.appProxy.isDeletable;
     } else {
-        self.isDeletable = YES;
+        self.isDeletable = YES; // 低版本系统兜底处理
     }
     
     // Bundle URL
@@ -124,12 +124,10 @@
             // URL Schemes
             NSArray *bundleURLTypes = [infoDictionary objectForKey:@"CFBundleURLTypes"];
             if ([bundleURLTypes isKindOfClass:[NSArray class]]) {
-            
                 if (bundleURLTypes.firstObject && [bundleURLTypes.firstObject isKindOfClass:[NSDictionary class]]) {
                     id urlSchemes = [bundleURLTypes.firstObject objectForKey:@"CFBundleURLSchemes"];
                     if ([urlSchemes isKindOfClass:[NSArray class]]) {
                         self.urlSchemes = urlSchemes;
-                
                     }
                 }
             }
@@ -137,7 +135,6 @@
             // Queries Schemes
             id queriesSchemes = [infoDictionary objectForKey:@"LSApplicationQueriesSchemes"];
             if ([queriesSchemes isKindOfClass:[NSArray class]]) {
-          
                 self.queriesSchemes = queriesSchemes;
             }
             
@@ -196,7 +193,6 @@
 #pragma mark - Caches
 
 - (NSURL *)cacheDirectoryURL {
-    
     return [self.dataContainerURL URLByAppendingPathComponent:@"/Library/Caches/"];
 }
 
@@ -223,7 +219,6 @@
         for (NSURL *url in cacheDirectoriesURLs) {
             if (url && [[NSFileManager defaultManager] fileExistsAtPath:url.path]) {
                 unsigned long long int folderSize = 0;
-          
                 [[NSFileManager defaultManager] nr_getAllocatedSize:&folderSize ofDirectoryAtURL:url error:nil];
                 totalSize += folderSize;
             }
@@ -280,17 +275,13 @@
 #pragma mark - Permissions
 
 - (NSArray <NSDictionary *> *)getPermissions {
-    CFBundleRef bundle = CFBundleCreate(kCFAllocatorDefault, (CFURLRef)self.appProxy.bundleURL);
-    if (bundle) {
-        NSArray *information = TCCAccessCopyInformationForBundle(bundle);
-        CFRelease(bundle);
-        return information;
-    }
-    return nil;
+    // 使用适配了 iOS 15+ 的 TCC 接口，传入 bundleIdentifier 即可
+    return TCCAccessCopyInformationForBundleIdentifier(self.bundleIdentifier);
 }
 
 - (void)resetAllAppPermissions {
     SBSApplicationTerminationAssertionRef assertion = SBSApplicationTerminationAssertionCreateWithError(NULL, self.bundleIdentifier, 1, NULL);
+    
     [self _resetAllAppPermissions];
     
     if (assertion) {
@@ -299,11 +290,8 @@
 }
 
 - (void)_resetAllAppPermissions {
-    CFBundleRef bundle = CFBundleCreate(kCFAllocatorDefault, (CFURLRef)self.appProxy.bundleURL);
-    if (bundle) {
-        TCCAccessResetForBundle(kTCCServiceAll, bundle);
-        CFRelease(bundle);
-    }
+    // 使用适配了 iOS 15+ 的 TCC 接口进行重置
+    TCCAccessResetForBundleIdentifier(kTCCServiceAll, self.bundleIdentifier);
     
     // Reset location permission
     [CLLocationManager setAuthorizationStatusByType:kCLAuthorizationStatusNotDetermined forBundleIdentifier:self.bundleIdentifier];
@@ -375,6 +363,7 @@
         }
         
         // Reset all permissions
+        // 根据真实的应用状态决定，放开了原有的 appStoreVendable 限制
         if (self.isApplication) {
             [self _resetAllAppPermissions];
         }
@@ -386,7 +375,7 @@
         dispatch_async(dispatch_get_main_queue(), ^{
             completion();
         });
-});
+    });
 }
 
 #pragma mark - Uninstall App
