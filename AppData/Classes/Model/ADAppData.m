@@ -448,25 +448,58 @@
 
 // 2. 获取 TrackID
 - (void)fetchDowngradeTrackIDWithCompletion:(void(^)(long long trackId, NSError *error))completion {
-    NSString *countryCode = @"us"; // 默认美区兜底
+    NSString *countryCode = @"us";
     NSLocale *locale = [NSLocale currentLocale];
-    NSString *code = [locale objectForKey:NSLocaleCountryCode];
-    if (code) countryCode = [code lowercaseString];
+    // 安全获取地区代码，避免旧 API 崩溃
+    if ([locale respondsToSelector:@selector(countryCode)]) {
+        NSString *code = [locale countryCode];
+        if (code) countryCode = [code lowercaseString];
+    }
     
-    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"https://itunes.apple.com/lookup?bundleId=%@&limit=1&media=software&country=%@", self.bundleIdentifier, countryCode]];
+    // URL 安全编码，防止 BundleID 带有特殊字符导致 URL 为空崩溃
+    NSString *safeBundleId = [self.bundleIdentifier stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]] ?: self.bundleIdentifier;
+    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"https://itunes.apple.com/lookup?bundleId=%@&limit=1&media=software&country=%@", safeBundleId, countryCode]];
+    
+    if (!url) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            completion(0, [NSError errorWithDomain:@"AppData" code:400 userInfo:@{NSLocalizedDescriptionKey: @"无效的请求 URL"}]);
+        });
+        return;
+    }
+
     NSURLRequest *request = [NSURLRequest requestWithURL:url];
-    
     [[[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (error) { completion(0, error); return; }
-            NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+            if (!data) { // 防止 data 为 nil 导致 JSON 解析直接抛出异常崩溃
+                completion(0, [NSError errorWithDomain:@"AppData" code:500 userInfo:@{NSLocalizedDescriptionKey: @"服务器返回了空数据"}]);
+                return;
+            }
+            
+            NSDictionary *json = nil;
+            @try {
+                json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+            } @catch (NSException *e) {
+                json = nil;
+            }
+            
+            // 防止接口返回非字典类型导致后续取值崩溃
+            if (![json isKindOfClass:[NSDictionary class]]) {
+                completion(0, [NSError errorWithDomain:@"AppData" code:500 userInfo:@{NSLocalizedDescriptionKey: @"解析数据失败"}]);
+                return;
+            }
+            
             NSArray *results = json[@"results"];
             if ([results isKindOfClass:[NSArray class]] && results.count > 0) {
-                long long trackId = [results.firstObject[@"trackId"] longLongValue];
-                completion(trackId, nil);
-            } else {
-                completion(0, [NSError errorWithDomain:@"AppData" code:404 userInfo:@{NSLocalizedDescriptionKey: @"未能在 App Store 找到该应用，或不支持降级"}]);
+                NSDictionary *firstResult = results.firstObject;
+                if ([firstResult isKindOfClass:[NSDictionary class]] && firstResult[@"trackId"]) {
+                    long long trackId = [firstResult[@"trackId"] longLongValue];
+                    completion(trackId, nil);
+                    return;
+                }
             }
+            
+            completion(0, [NSError errorWithDomain:@"AppData" code:404 userInfo:@{NSLocalizedDescriptionKey: @"未能在 App Store 找到该应用，或不支持降级"}]);
         });
     }] resume];
 }
@@ -475,12 +508,34 @@
 - (void)fetchDowngradeVersionsForTrackID:(long long)trackId completion:(void(^)(NSArray *versions, NSError *error))completion {
     NSString *serverURL = @"https://apis.bilin.eu.org/history/";
     NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"%@%lld", serverURL, trackId]];
-    NSURLRequest *request = [NSURLRequest requestWithURL:url];
+    if (!url) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            completion(nil, [NSError errorWithDomain:@"AppData" code:400 userInfo:@{NSLocalizedDescriptionKey: @"无效的版本请求 URL"}]);
+        });
+        return;
+    }
     
+    NSURLRequest *request = [NSURLRequest requestWithURL:url];
     [[[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (error) { completion(nil, error); return; }
-            NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+            if (!data) {
+                completion(nil, [NSError errorWithDomain:@"AppData" code:500 userInfo:@{NSLocalizedDescriptionKey: @"服务器返回了空数据"}]);
+                return;
+            }
+            
+            NSDictionary *json = nil;
+            @try {
+                json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+            } @catch (NSException *e) {
+                json = nil;
+            }
+            
+            if (![json isKindOfClass:[NSDictionary class]]) {
+                completion(nil, [NSError errorWithDomain:@"AppData" code:500 userInfo:@{NSLocalizedDescriptionKey: @"解析数据失败"}]);
+                return;
+            }
+            
             NSArray *versions = json[@"data"];
             if ([versions isKindOfClass:[NSArray class]] && versions.count > 0) {
                 completion(versions, nil);
@@ -490,6 +545,7 @@
         });
     }] resume];
 }
+
 
 // 4. 执行私有 API 降级
 - (void)performDowngradeWithTrackID:(long long)trackId versionID:(long long)versionId controller:(UIViewController *)controller {
