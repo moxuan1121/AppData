@@ -57,6 +57,12 @@
 @property (nonatomic,readonly) NSSet *claimedURLSchemes;
 @end
 
+@interface LSApplicationWorkspace : NSObject
++ (id)defaultWorkspace;
+- (BOOL)uninstallApplication:(NSString *)bundleIdentifier withOptions:(NSDictionary *)options error:(NSError **)error;
+- (BOOL)uninstallApplication:(NSString *)bundleIdentifier withOptions:(NSDictionary *)options;
+@end
+
 // SpringBoard
 @interface SBApplicationInfo : NSObject
 - (NSURL *)dataContainerURL;
@@ -78,7 +84,8 @@
 
 @interface SBIcon : NSObject
 - (NSString *)applicationBundleID;
-- (NSString *)applicationBundleIdentifier; // iOS 15+ 兼容
+- (NSString *)applicationBundleIdentifier;
+// iOS 15+ 兼容
 - (SBApplication *)application;
 - (NSInteger)badgeValue;
 @end
