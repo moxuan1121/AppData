@@ -233,7 +233,11 @@
                                     [self.dataViewController dismiss]; // Close the AppData panel on success
                                 } else {
                                     [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeError];
-                                    [ADDataViewController showAlertFromViewController:self.dataViewController title:@"Error" message:@"Failed to uninstall the application." cancelTitle:@"OK"];
+                                    
+                                    // 直接在当前方法构建错误提示框，避免调用头文件未公开的类方法
+                                    UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"Error" message:@"Failed to uninstall the application." preferredStyle:UIAlertControllerStyleAlert];
+                                    [errorAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleCancel handler:nil]];
+                                    [self.dataViewController presentViewController:errorAlert animated:YES completion:nil];
                                 }
                             }];
                         }];
