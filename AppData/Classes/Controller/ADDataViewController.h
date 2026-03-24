@@ -15,6 +15,7 @@
 @property (nonatomic, strong) UITableView *moreTableView;
 
 @property (nonatomic, assign) BOOL dockDismissed;
+@property (nonatomic, weak) UIScrollView *desktopScrollView; // 新增：保存桌面滑动视图引用，用于阻断滑动
 
 - (instancetype)initWithAppData:(ADAppData *)data;
 
