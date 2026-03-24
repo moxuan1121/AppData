@@ -98,7 +98,6 @@
                 [actionsBar.bottomAnchor constraintEqualToAnchor:cell.contentView.bottomAnchor].active = YES;
                 __weak ADActionsBarView *weakActionsBar = actionsBar;
                 
-                // 【修改点：去掉了 \n，单行显示标题】
                 // 1. Update Badge
                 [actionsBar addItemWithTitle:@"修改角标"
                                       detail:[NSString stringWithFormat:@"%td",[self.appData appBadgeCount]]
@@ -143,7 +142,6 @@
                         }];
                     }
                 }];
-                
                 // 2. Clear Caches
                 [actionsBar addItemWithTitle:@"清理缓存"
                                       detail:@"计算中..."
@@ -187,11 +185,10 @@
                                         }];
                                     });
                                 }];
-                             });
+                            });
                         }];
                     }
                 }];
-                
                 // 4. Reset Permissions
                 [actionsBar addItemWithTitle:@"重置权限"
                                       detail:[NSString stringWithFormat:@"%td",[self.appData getPermissions].count]
@@ -199,7 +196,7 @@
                                      handler:^{
                     if (self.appData.isApplication) {
                         [self showDestructiveConfirmationAlertWithTitle:@"重置应用权限" message:@"这将清除该应用访问通讯录、照片、相机等的所有权限。\n下次打开该应用时会重新请求这些权限。"
-                        confirmTitle:@"重置" confirmHandler:^{
+                                                           confirmTitle:@"重置" confirmHandler:^{
                             NSInteger itemIndex = 3;
                             [self.appData resetAllAppPermissions];
                             [weakActionsBar setDetail:@"已重置!" forItemAtIndex:itemIndex];
@@ -211,15 +208,90 @@
                     }
                 }];
                 
-                // 5. Uninstall App (小字改为"彻底卸载")
+                // 5. Downgrade App (新增降级应用)
+                UIImage *downgradeIcon = nil;
+                if (@available(iOS 13.0, *)) {
+                    downgradeIcon = [UIImage systemImageNamed:@"arrow.down.circle"]; // 系统自带下载圈圈图标
+                } else {
+                    downgradeIcon = [ADHelper imageNamed:@"OffloadApp"]; // 兜底图标
+                }
+                [actionsBar addItemWithTitle:@"降级应用"
+                                      detail:@"版本回退"
+                                       image:downgradeIcon
+                                     handler:^{
+                    if (self.appData.isApplication) {
+                        UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"降级应用" 
+                                                                                                 message:@"请选择降级的获取方式" 
+                                                                                          preferredStyle:UIAlertControllerStyleAlert];
+                        
+                        // 服务器获取选项
+                        [alertController addAction:[UIAlertAction actionWithTitle:@"服务器获取" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                            NSInteger itemIndex = 4;
+                            [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
+                            [weakActionsBar setDetail:@"获取中..." forItemAtIndex:itemIndex];
+                            
+                            // 动态调用 TSDowngradeManager，传入已桥接好的 appData
+                            id downgradeManager = [NSClassFromString(@"TSDowngradeManager") performSelector:NSSelectorFromString(@"sharedInstance")];
+                            if (downgradeManager) {
+                                #pragma clang diagnostic push
+                                #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+                                [downgradeManager performSelector:NSSelectorFromString(@"initiateDowngradeForAppInfo:fromViewController:") withObject:self.appData withObject:self.dataViewController];
+                                #pragma clang diagnostic pop
+                            }
+                            
+                            // 延时恢复按钮状态 (因为 TSDowngradeManager 弹出自己的后续 UI)
+                            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                                [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
+                                [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
+                            });
+                        }]];
+                        
+                        // 自定义版本号选项
+                        [alertController addAction:[UIAlertAction actionWithTitle:@"自定义版本号" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                            NSInteger itemIndex = 4;
+                            [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
+                            [weakActionsBar setDetail:@"加载中..." forItemAtIndex:itemIndex];
+                            
+                            id downgradeManager = [NSClassFromString(@"TSDowngradeManager") performSelector:NSSelectorFromString(@"sharedInstance")];
+                            if (downgradeManager) {
+                                #pragma clang diagnostic push
+                                #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+                                [downgradeManager performSelector:NSSelectorFromString(@"initiateDowngradeForAppInfo:withCustomVersionIDFromViewController:") withObject:self.appData withObject:self.dataViewController];
+                                #pragma clang diagnostic pop
+                            }
+                            
+                            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                                [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
+                                [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
+                            });
+                        }]];
+                        
+                        [alertController addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+                            if (self.dataViewController.dockDismissed && IS_IPAD) [ADDataViewController presentFloatingDockIfNeeded];
+                        }]];
+                        
+                        if (IS_IPAD) {
+                            self.dataViewController.dockDismissed = [ADDataViewController dismissFloatingDockIfNeededWithCompletion:^{
+                                [self.dataViewController presentViewController:alertController animated:YES completion:nil];
+                            }];
+                            if (!self.dataViewController.dockDismissed) {
+                                [self.dataViewController presentViewController:alertController animated:YES completion:nil];
+                            }
+                        } else {
+                            [self.dataViewController presentViewController:alertController animated:YES completion:nil];
+                        }
+                    }
+                }];
+
+                // 6. Uninstall App (小字改为"彻底卸载" - 注意索引变为了5)
                 [actionsBar addItemWithTitle:@"卸载应用"
                                       detail:@"彻底卸载"
                                        image:[ADHelper imageNamed:@"OffloadApp"]
                                      handler:^{
                     if (self.appData.isDeletable) {
                         [self showDestructiveConfirmationAlertWithTitle:@"卸载应用" message:@"这将彻底卸载该应用并删除其所有数据。\n此操作不可撤销！"
-                        confirmTitle:@"卸载" confirmHandler:^{
-                            NSInteger itemIndex = 4;
+                                                           confirmTitle:@"卸载" confirmHandler:^{
+                            NSInteger itemIndex = 5; // <--- 关键修改：从 4 改为 5
                             [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
                             
                             [self.appData uninstallAppWithCompletion:^(BOOL success) {
@@ -237,14 +309,14 @@
                         }];
                     }
                 }];
-                
                 // Set Button Enables based on real application state, not App Store vendability
                 if (!self.appData.isApplication) {
                     [actionsBar setItemEnabled:NO atIndex:2];
                     [actionsBar setItemEnabled:NO atIndex:3];
+                    [actionsBar setItemEnabled:NO atIndex:4]; // <-- 降级应用索引 4
                 }
                 if (!self.appData.isDeletable) {
-                    [actionsBar setItemEnabled:NO atIndex:4];
+                    [actionsBar setItemEnabled:NO atIndex:5]; // <-- 彻底卸载索引更新为 5
                 }
                 
                 // Set Cache Size
