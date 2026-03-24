@@ -51,13 +51,13 @@
     view.actionImageView.translatesAutoresizingMaskIntoConstraints = NO;
     [view addSubview:view.actionImageView];
 
-    // 【修改点】：锁定统一大小为 32x32，为了保持垂直居中，top constant 调为 8
+    // 【修改为 31x31】
     [view.actionImageView.topAnchor constraintEqualToAnchor:view.topAnchor constant:8].active = YES;
     [view.actionImageView.centerXAnchor constraintEqualToAnchor:view.centerXAnchor].active = YES;
-    [view.actionImageView.widthAnchor constraintEqualToConstant:32].active = YES;
-    [view.actionImageView.heightAnchor constraintEqualToConstant:32].active = YES;
+    [view.actionImageView.widthAnchor constraintEqualToConstant:31].active = YES;
+    [view.actionImageView.heightAnchor constraintEqualToConstant:31].active = YES;
 
-    // 【修复加载动画】：赋予它和 actionImageView 完全独立且相同的 32x32 约束
+    // 【加载动画也修改为 31x31，并与图标重叠居中】
     view.activityIndicatorView = [ADAppearance.sharedInstance activityIndicatorView];
     view.activityIndicatorView.userInteractionEnabled = NO;
     view.activityIndicatorView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -67,8 +67,8 @@
     
     [view.activityIndicatorView.topAnchor constraintEqualToAnchor:view.topAnchor constant:8].active = YES;
     [view.activityIndicatorView.centerXAnchor constraintEqualToAnchor:view.centerXAnchor].active = YES;
-    [view.activityIndicatorView.widthAnchor constraintEqualToConstant:32].active = YES;
-    [view.activityIndicatorView.heightAnchor constraintEqualToConstant:32].active = YES;
+    [view.activityIndicatorView.widthAnchor constraintEqualToConstant:31].active = YES;
+    [view.activityIndicatorView.heightAnchor constraintEqualToConstant:31].active = YES;
 
     view.nameLabel = [[UILabel alloc] init];
     view.nameLabel.tag = 2;
@@ -167,7 +167,6 @@
 }
 
 @end
-
 
 @implementation ADActionButton
 
