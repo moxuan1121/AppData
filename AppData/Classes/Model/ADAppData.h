@@ -20,16 +20,19 @@
 @property (nonatomic, strong) UIImage *iconImage;
 
 - (NSString *)name;
+// === 新增：为兼容 TSDowngradeManager 桥接的属性 ===
+- (NSString *)displayName;
+- (NSString *)bundlePath;
+// ===========================================
+
 @property (nonatomic, strong) NSString *version;
 @property (nonatomic, strong) NSString *bundleIdentifier;
 
 @property (nonatomic, assign) BOOL appStoreVendable;
 @property (nonatomic, assign) BOOL isDeletable;
-
 @property (nonatomic, strong) NSURL *bundleURL;
 @property (nonatomic, strong) NSURL *dataContainerURL;
 @property (nonatomic, strong) NSArray <ADAppDataGroup *> *appGroups;
-
 @property (nonatomic, assign) NSInteger diskUsage;
 @property (nonatomic, strong) NSString *diskUsageString;
 
