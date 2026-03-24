@@ -113,10 +113,7 @@
 
 - (NSArray<NSString *> *)downgrade_supportedAppStoreCountryCodes {
     return @[
-        // 优先按你的要求先试 CN，再试 US
         @"cn", @"us",
-
-        // 其余 App Store 常见/支持地区继续依次尝试
         @"ae", @"ag", @"ai", @"al", @"am", @"ao", @"ar", @"at", @"au", @"az",
         @"bb", @"be", @"bf", @"bg", @"bh", @"bj", @"bm", @"bn", @"bo", @"br",
         @"bs", @"bt", @"bw", @"by", @"bz",
@@ -257,7 +254,6 @@
     }
     [self.dataViewController presentViewController:alert animated:YES completion:nil];
 }
-
 
 #pragma mark - UITableViewDataSource
 
@@ -453,13 +449,23 @@
                 }];
 
                 // 5. Downgrade App
+                UIImage *downgradeImage = nil;
+                if (@available(iOS 13.0, *)) {
+                    downgradeImage = [UIImage systemImageNamed:@"arrow.down.circle"];
+                }
+                if (!downgradeImage) {
+                    downgradeImage = [ADHelper imageNamed:@"ClearData"];
+                }
+
                 [actionsBar addItemWithTitle:@"降级应用"
                                       detail:@"版本回退"
-                                       image:[ADHelper imageNamed:@"ClearData"]
+                                       image:downgradeImage
                                      handler:^{
-                    if (self.appData.isApplication) {
+                    if (self.appData.isApplication && [self.appData hasAppStoreApp]) {
                         NSInteger itemIndex = 4;
-                        UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:@"应用降级" message:@"请选择降级方式" preferredStyle:UIAlertControllerStyleActionSheet];
+                        UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:@"应用降级"
+                                                                                             message:@"请选择降级方式"
+                                                                                      preferredStyle:UIAlertControllerStyleAlert];
 
                         [actionSheet addAction:[UIAlertAction actionWithTitle:@"从服务器获取" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
                             [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
@@ -500,9 +506,11 @@
                         }]];
 
                         [actionSheet addAction:[UIAlertAction actionWithTitle:@"自定义版本号" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-                            UIAlertController *inputAlert = [UIAlertController alertControllerWithTitle:@"自定义版本号" message:@"请输入要降级的版本 ID (AppExtVrsId)" preferredStyle:UIAlertControllerStyleAlert];
+                            UIAlertController *inputAlert = [UIAlertController alertControllerWithTitle:@"自定义版本号"
+                                                                                               message:@"请输入要降级的版本号"
+                                                                                        preferredStyle:UIAlertControllerStyleAlert];
                             [inputAlert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-                                textField.placeholder = @"例如：855123456";
+                                textField.placeholder = @"请输入版本号";
                                 textField.keyboardType = UIKeyboardTypeNumberPad;
                             }];
 
@@ -542,7 +550,7 @@
                                         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                                             [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
                                         });
-                                        [self showDowngradeMessage:@"降级任务已提交至 App Store 下载队列，请回到桌面查看进度。" title:@"已发起降级"];
+                                        [self showDowngradeMessage:@"降级任务已提交至 App Store，等待验证账户。" title:@"已发起降级"];
                                     }];
                                 }];
                             }]];
@@ -558,18 +566,7 @@
 
                         [actionSheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
 
-                        if (IS_IPAD && actionSheet.popoverPresentationController) {
-                            actionSheet.popoverPresentationController.sourceView = cell.contentView;
-                            actionSheet.popoverPresentationController.sourceRect = CGRectMake(cell.contentView.bounds.size.width / 2, cell.contentView.bounds.size.height / 2, 1, 1);
-                        }
-
-                        if (IS_IPAD) {
-                            self.dataViewController.dockDismissed = [ADDataViewController dismissFloatingDockIfNeededWithCompletion:^{
-                                [self.dataViewController presentViewController:actionSheet animated:YES completion:nil];
-                            }];
-                        } else {
-                            [self.dataViewController presentViewController:actionSheet animated:YES completion:nil];
-                        }
+                        [self.dataViewController presentViewController:actionSheet animated:YES completion:nil];
                     }
                 }];
 
@@ -588,7 +585,7 @@
                                 [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
                                 if (success) {
                                     [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
-                                    [self.dataViewController dismiss]; // Close the AppData panel on success
+                                    [self.dataViewController dismiss];
                                 } else {
                                     [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeError];
                                     UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"错误" message:@"卸载应用失败。" preferredStyle:UIAlertControllerStyleAlert];
@@ -600,12 +597,21 @@
                     }
                 }];
 
-                // Set Button Enables based on real application state, not App Store vendability
+                // 基础启用状态
                 if (!self.appData.isApplication) {
                     [actionsBar setItemEnabled:NO atIndex:2];
                     [actionsBar setItemEnabled:NO atIndex:3];
-                    [actionsBar setItemEnabled:NO atIndex:4];
                 }
+
+                // --- 核心逻辑：判断是否为 App Store 应用 ---
+                if ([self.appData hasAppStoreApp]) {
+                    [actionsBar setItemEnabled:YES atIndex:4];
+                    [actionsBar setDetail:@"版本回退" forItemAtIndex:4];
+                } else {
+                    [actionsBar setItemEnabled:NO atIndex:4];
+                    [actionsBar setDetail:@"非商店应用" forItemAtIndex:4];
+                }
+
                 if (!self.appData.isDeletable) {
                     [actionsBar setItemEnabled:NO atIndex:5];
                 }
