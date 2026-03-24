@@ -552,7 +552,7 @@
         [inv invoke];
     }
 }
-
+@end
 
 @implementation ADAppDataGroup
 
