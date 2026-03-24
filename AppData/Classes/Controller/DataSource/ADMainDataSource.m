@@ -103,9 +103,7 @@
                                       detail:[NSString stringWithFormat:@"%td",[self.appData appBadgeCount]]
                                        image:[ADHelper imageNamed:@"ClearBadge"]
                                      handler:^{
-                    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"应用角标"
-                                                                                             message:@"修改或清除当前应用的角标数量"
-                                                                                      preferredStyle:UIAlertControllerStyleAlert];
+                    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"应用角标" message:@"修改或清除当前应用的角标数量" preferredStyle:UIAlertControllerStyleAlert];
                     [alertController addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
                         textField.text = [NSString stringWithFormat:@"%td",self.appData.appBadgeCount];
                         textField.placeholder = @"角标数量";
@@ -113,40 +111,25 @@
                         textField.enabled = NO;
                     }];
                     [alertController addAction:[UIAlertAction actionWithTitle:@"修改" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-                        UITextField *field = alertController.textFields.firstObject;
-                        NSInteger count = [field.text integerValue];
+                        NSInteger count = [alertController.textFields.firstObject.text integerValue];
                         [self.appData setAppBadgeCount:count];
                         [weakActionsBar setDetail:@"已修改!" forItemAtIndex:0];
                         DISPATCH_AFTER(0.5, { [weakActionsBar setDetail:[NSString stringWithFormat:@"%td",count] forItemAtIndex:0]; });
-                        if (self.dataViewController.dockDismissed && IS_IPAD) [ADDataViewController presentFloatingDockIfNeeded];
                     }]];
                     [alertController addAction:[UIAlertAction actionWithTitle:@"清除" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
                         [self.appData setAppBadgeCount:0];
                         [weakActionsBar setDetail:@"已清除!" forItemAtIndex:0];
                         DISPATCH_AFTER(0.5, { [weakActionsBar setDetail:@"0" forItemAtIndex:0]; });
-                        if (self.dataViewController.dockDismissed && IS_IPAD) [ADDataViewController presentFloatingDockIfNeeded];
                     }]];
-                    [alertController addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
-                        if (self.dataViewController.dockDismissed && IS_IPAD) [ADDataViewController presentFloatingDockIfNeeded];
-                    }]];
+                    [alertController addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
                     
-                    if (IS_IPAD) {
-                        self.dataViewController.dockDismissed = [ADDataViewController dismissFloatingDockIfNeededWithCompletion:^{
-                            [self.dataViewController presentViewController:alertController animated:YES completion:^{
-                                alertController.textFields.firstObject.enabled = true;
-                            }];
-                        }];
-                    } else {
-                        [self.dataViewController presentViewController:alertController animated:YES completion:^{
-                            alertController.textFields.firstObject.enabled = true;
-                        }];
-                    }
+                    [self.dataViewController presentViewController:alertController animated:YES completion:^{
+                        alertController.textFields.firstObject.enabled = true;
+                    }];
                 }];
+                
                 // 2. Clear Caches
-                [actionsBar addItemWithTitle:@"清理缓存"
-                                      detail:@"计算中..."
-                                       image:[ADHelper imageNamed:@"ClearCache"]
-                                     handler:^{
+                [actionsBar addItemWithTitle:@"清理缓存" detail:@"计算中..." image:[ADHelper imageNamed:@"ClearCache"] handler:^{
                     NSInteger itemIndex = 1;
                     [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
                     [weakActionsBar setDetail:@"清理中..." forItemAtIndex:itemIndex];
@@ -165,10 +148,7 @@
                 }];
                 
                 // 3. Clear App Data
-                [actionsBar addItemWithTitle:@"清理数据"
-                                      detail:@"计算中..."
-                                       image:[ADHelper imageNamed:@"ClearData"]
-                                     handler:^{
+                [actionsBar addItemWithTitle:@"清理数据" detail:@"计算中..." image:[ADHelper imageNamed:@"ClearData"] handler:^{
                     if (self.appData.isApplication) {
                         [self showDestructiveConfirmationAlertWithTitle:@"清理应用数据" message:@"清理应用数据将只会删除应用沙盒中的“Library”和“Documents”文件夹，不会删除App Groups分组数据。" confirmTitle:@"清理" confirmHandler:^{
                             NSInteger itemIndex = 2;
@@ -189,14 +169,11 @@
                         }];
                     }
                 }];
+                
                 // 4. Reset Permissions
-                [actionsBar addItemWithTitle:@"重置权限"
-                                      detail:[NSString stringWithFormat:@"%td",[self.appData getPermissions].count]
-                                       image:[ADHelper imageNamed:@"ResetPermissions"]
-                                     handler:^{
+                [actionsBar addItemWithTitle:@"重置权限" detail:[NSString stringWithFormat:@"%td",[self.appData getPermissions].count] image:[ADHelper imageNamed:@"ResetPermissions"] handler:^{
                     if (self.appData.isApplication) {
-                        [self showDestructiveConfirmationAlertWithTitle:@"重置应用权限" message:@"这将清除该应用访问通讯录、照片、相机等的所有权限。\n下次打开该应用时会重新请求这些权限。"
-                                                           confirmTitle:@"重置" confirmHandler:^{
+                        [self showDestructiveConfirmationAlertWithTitle:@"重置应用权限" message:@"这将清除该应用访问通讯录、照片、相机等的所有权限。\n下次打开该应用时会重新请求这些权限。" confirmTitle:@"重置" confirmHandler:^{
                             NSInteger itemIndex = 3;
                             [self.appData resetAllAppPermissions];
                             [weakActionsBar setDetail:@"已重置!" forItemAtIndex:itemIndex];
@@ -208,97 +185,112 @@
                     }
                 }];
                 
-                // 5. Downgrade App (新增降级应用)
+                // 5. Downgrade App (原生降级组件)
                 UIImage *downgradeIcon = nil;
-                if (@available(iOS 13.0, *)) {
-                    downgradeIcon = [UIImage systemImageNamed:@"arrow.down.circle"]; // 系统自带下载圈圈图标
-                } else {
-                    downgradeIcon = [ADHelper imageNamed:@"OffloadApp"]; // 兜底图标
-                }
-                [actionsBar addItemWithTitle:@"降级应用"
-                                      detail:@"版本回退"
-                                       image:downgradeIcon
-                                     handler:^{
+                if (@available(iOS 13.0, *)) { downgradeIcon = [UIImage systemImageNamed:@"arrow.down.circle"]; }
+                else { downgradeIcon = [ADHelper imageNamed:@"OffloadApp"]; }
+                
+                [actionsBar addItemWithTitle:@"降级应用" detail:@"版本回退" image:downgradeIcon handler:^{
                     if (self.appData.isApplication) {
-                        UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"降级应用" 
-                                                                                                 message:@"请选择降级的获取方式" 
-                                                                                          preferredStyle:UIAlertControllerStyleAlert];
+                        UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"降级应用" message:@"请选择降级的获取方式" preferredStyle:UIAlertControllerStyleAlert];
                         
-                        // 服务器获取选项
+                        // 原生：服务器获取
                         [alertController addAction:[UIAlertAction actionWithTitle:@"服务器获取" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
                             NSInteger itemIndex = 4;
                             [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
                             [weakActionsBar setDetail:@"获取中..." forItemAtIndex:itemIndex];
                             
-                            // 动态调用 TSDowngradeManager，传入已桥接好的 appData
-                            id downgradeManager = [NSClassFromString(@"TSDowngradeManager") performSelector:NSSelectorFromString(@"sharedInstance")];
-                            if (downgradeManager) {
-                                #pragma clang diagnostic push
-                                #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-                                [downgradeManager performSelector:NSSelectorFromString(@"initiateDowngradeForAppInfo:fromViewController:") withObject:self.appData withObject:self.dataViewController];
-                                #pragma clang diagnostic pop
-                            }
-                            
-                            // 延时恢复按钮状态 (因为 TSDowngradeManager 弹出自己的后续 UI)
-                            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                                [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
-                                [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
-                            });
+                            [self.appData fetchDowngradeTrackIDWithCompletion:^(long long trackId, NSError *error) {
+                                if (error) {
+                                    [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
+                                    [weakActionsBar setDetail:@"获取失败" forItemAtIndex:itemIndex];
+                                    [self showConfirmationAlertWithTitle:@"错误" message:error.localizedDescription confirmTitle:@"确定" confirmStyle:UIAlertActionStyleCancel confirmHandler:nil];
+                                    return;
+                                }
+                                
+                                [self.appData fetchDowngradeVersionsForTrackID:trackId completion:^(NSArray *versions, NSError *error) {
+                                    [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
+                                    [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
+                                    
+                                    if (error) {
+                                        [self showConfirmationAlertWithTitle:@"错误" message:error.localizedDescription confirmTitle:@"确定" confirmStyle:UIAlertActionStyleCancel confirmHandler:nil];
+                                        return;
+                                    }
+                                    
+                                    // 原生弹窗显示可用版本
+                                    UIAlertController *versionAlert = [UIAlertController alertControllerWithTitle:@"选择版本" message:@"请选择要降级的版本" preferredStyle:UIAlertControllerStyleActionSheet];
+                                    NSArray *sortedVersions = [versions sortedArrayUsingDescriptors:@[[NSSortDescriptor sortDescriptorWithKey:@"release_date" ascending:NO]]];
+                                    for (NSDictionary *ver in sortedVersions) {
+                                        NSString *bVer = ver[@"bundle_version"] ?: @"N/A";
+                                        NSString *extId = [ver[@"external_identifier"] stringValue] ?: @"";
+                                        NSString *title = extId.length > 0 ? [NSString stringWithFormat:@"%@ (%@)", bVer, extId] : bVer;
+                                        
+                                        [versionAlert addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+                                            [self.appData performDowngradeWithTrackID:trackId versionID:[extId longLongValue] controller:self.dataViewController];
+                                        }]];
+                                    }
+                                    [versionAlert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+                                    
+                                    // 适配 iPad 防止崩溃
+                                    if (versionAlert.popoverPresentationController) {
+                                        versionAlert.popoverPresentationController.sourceView = self.dataViewController.view;
+                                        versionAlert.popoverPresentationController.sourceRect = CGRectMake(self.dataViewController.view.bounds.size.width/2, self.dataViewController.view.bounds.size.height/2, 1, 1);
+                                        versionAlert.popoverPresentationController.permittedArrowDirections = 0;
+                                    }
+                                    [self.dataViewController presentViewController:versionAlert animated:YES completion:nil];
+                                }];
+                            }];
                         }]];
                         
-                        // 自定义版本号选项
+                        // 原生：自定义版本号
                         [alertController addAction:[UIAlertAction actionWithTitle:@"自定义版本号" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
                             NSInteger itemIndex = 4;
                             [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
-                            [weakActionsBar setDetail:@"加载中..." forItemAtIndex:itemIndex];
+                            [weakActionsBar setDetail:@"环境校验..." forItemAtIndex:itemIndex];
                             
-                            id downgradeManager = [NSClassFromString(@"TSDowngradeManager") performSelector:NSSelectorFromString(@"sharedInstance")];
-                            if (downgradeManager) {
-                                #pragma clang diagnostic push
-                                #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-                                [downgradeManager performSelector:NSSelectorFromString(@"initiateDowngradeForAppInfo:withCustomVersionIDFromViewController:") withObject:self.appData withObject:self.dataViewController];
-                                #pragma clang diagnostic pop
-                            }
-                            
-                            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                            [self.appData fetchDowngradeTrackIDWithCompletion:^(long long trackId, NSError *error) {
                                 [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
                                 [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
-                            });
-                        }]];
-                        
-                        [alertController addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
-                            if (self.dataViewController.dockDismissed && IS_IPAD) [ADDataViewController presentFloatingDockIfNeeded];
-                        }]];
-                        
-                        if (IS_IPAD) {
-                            self.dataViewController.dockDismissed = [ADDataViewController dismissFloatingDockIfNeededWithCompletion:^{
-                                [self.dataViewController presentViewController:alertController animated:YES completion:nil];
+                                if (error) {
+                                    [self showConfirmationAlertWithTitle:@"错误" message:error.localizedDescription confirmTitle:@"确定" confirmStyle:UIAlertActionStyleCancel confirmHandler:nil];
+                                    return;
+                                }
+                                
+                                UIAlertController *inputAlert = [UIAlertController alertControllerWithTitle:@"输入版本号" message:@"请输入 App Store 目标版本的 external_identifier" preferredStyle:UIAlertControllerStyleAlert];
+                                [inputAlert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
+                                    textField.placeholder = @"Version ID (例如: 852101000)";
+                                    textField.keyboardType = UIKeyboardTypeNumberPad;
+                                }];
+                                [inputAlert addAction:[UIAlertAction actionWithTitle:@"降级" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+                                    NSString *vIdStr = inputAlert.textFields.firstObject.text;
+                                    long long vId = [vIdStr longLongValue];
+                                    if (vId > 0) {
+                                        [self.appData performDowngradeWithTrackID:trackId versionID:vId controller:self.dataViewController];
+                                    } else {
+                                        [self showConfirmationAlertWithTitle:@"错误" message:@"无效的版本号" confirmTitle:@"确定" confirmStyle:UIAlertActionStyleCancel confirmHandler:nil];
+                                    }
+                                }]];
+                                [inputAlert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+                                [self.dataViewController presentViewController:inputAlert animated:YES completion:nil];
                             }];
-                            if (!self.dataViewController.dockDismissed) {
-                                [self.dataViewController presentViewController:alertController animated:YES completion:nil];
-                            }
-                        } else {
-                            [self.dataViewController presentViewController:alertController animated:YES completion:nil];
-                        }
+                        }]];
+                        
+                        [alertController addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+                        [self.dataViewController presentViewController:alertController animated:YES completion:nil];
                     }
                 }];
 
-                // 6. Uninstall App (小字改为"彻底卸载" - 注意索引变为了5)
-                [actionsBar addItemWithTitle:@"卸载应用"
-                                      detail:@"彻底卸载"
-                                       image:[ADHelper imageNamed:@"OffloadApp"]
-                                     handler:^{
+                // 6. Uninstall App (小字改为"彻底卸载")
+                [actionsBar addItemWithTitle:@"卸载应用" detail:@"彻底卸载" image:[ADHelper imageNamed:@"OffloadApp"] handler:^{
                     if (self.appData.isDeletable) {
-                        [self showDestructiveConfirmationAlertWithTitle:@"卸载应用" message:@"这将彻底卸载该应用并删除其所有数据。\n此操作不可撤销！"
-                                                           confirmTitle:@"卸载" confirmHandler:^{
-                            NSInteger itemIndex = 5; // <--- 关键修改：从 4 改为 5
+                        [self showDestructiveConfirmationAlertWithTitle:@"卸载应用" message:@"这将彻底卸载该应用并删除其所有数据。\n此操作不可撤销！" confirmTitle:@"卸载" confirmHandler:^{
+                            NSInteger itemIndex = 5;
                             [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
-                            
                             [self.appData uninstallAppWithCompletion:^(BOOL success) {
                                 [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
                                 if (success) {
                                     [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
-                                    [self.dataViewController dismiss]; // Close the AppData panel on success
+                                    [self.dataViewController dismiss];
                                 } else {
                                     [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeError];
                                     UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"错误" message:@"卸载应用失败。" preferredStyle:UIAlertControllerStyleAlert];
@@ -309,15 +301,34 @@
                         }];
                     }
                 }];
-                // Set Button Enables based on real application state, not App Store vendability
+                
+                // ============ 精准控制按钮状态 ============
                 if (!self.appData.isApplication) {
-                    [actionsBar setItemEnabled:NO atIndex:2];
-                    [actionsBar setItemEnabled:NO atIndex:3];
-                    [actionsBar setItemEnabled:NO atIndex:4]; // <-- 降级应用索引 4
+                    [actionsBar setItemEnabled:NO atIndex:2]; // 清理数据
+                    [actionsBar setItemEnabled:NO atIndex:3]; // 重置权限
+                    [actionsBar setItemEnabled:NO atIndex:4]; // 降级应用
+                } else {
+                    // 异步进行账号归属权校验，只有账号匹配的才可以亮起降级按钮
+                    [actionsBar setItemEnabled:NO atIndex:4];
+                    [actionsBar setDetail:@"校验账号..." forItemAtIndex:4];
+                    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                        BOOL isVerified = [self.appData isAppOwnershipVerified];
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            if (isVerified) {
+                                [actionsBar setItemEnabled:YES atIndex:4];
+                                [actionsBar setDetail:@"版本回退" forItemAtIndex:4];
+                            } else {
+                                [actionsBar setItemEnabled:NO atIndex:4];
+                                [actionsBar setDetail:@"账号不符" forItemAtIndex:4];
+                            }
+                        });
+                    });
                 }
+                
                 if (!self.appData.isDeletable) {
-                    [actionsBar setItemEnabled:NO atIndex:5]; // <-- 彻底卸载索引更新为 5
+                    [actionsBar setItemEnabled:NO atIndex:5]; // 卸载应用
                 }
+                // ==========================================
                 
                 // Set Cache Size
                 [actionsBar showLoadingIndicatorForItemAtIndex:1];
@@ -385,9 +396,7 @@
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
     if ([self isManageSection:indexPath.section]) {
-        if (indexPath.row == 0) {
-            return 100;
-        }
+        if (indexPath.row == 0) return 100;
         return 45;
     }
     return 50;
@@ -414,14 +423,10 @@
 
 - (void)didSelectContainerOrAppGroupSectionAtIndexPath:(NSIndexPath *)indexPath {
     if ([self isContainersSection:indexPath.section]) {
-        if (indexPath.row == 0) {
-            if (self.appData.bundleURL) {
-                [ADHelper openDirectoryAtURL:self.appData.bundleURL fromController:self.dataViewController];
-            }
-        } else if (indexPath.row == 1) {
-            if (self.appData.dataContainerURL) {
-                [ADHelper openDirectoryAtURL:self.appData.dataContainerURL fromController:self.dataViewController];
-            }
+        if (indexPath.row == 0 && self.appData.bundleURL) {
+            [ADHelper openDirectoryAtURL:self.appData.bundleURL fromController:self.dataViewController];
+        } else if (indexPath.row == 1 && self.appData.dataContainerURL) {
+            [ADHelper openDirectoryAtURL:self.appData.dataContainerURL fromController:self.dataViewController];
         }
     } else if ([self isAppGroupsSection:indexPath.section]) {
         ADAppDataGroup *group = [self.appData.appGroups objectAtIndex:indexPath.row];
@@ -481,7 +486,6 @@
             } else if ([self isAppGroupsSection:indexPath.section]) {
                 title = @"应用分组";
             }
-            
             return [UIMenu menuWithTitle:title children:actions];
         }];
         return configuration;
