@@ -309,18 +309,23 @@
     
     self.iconImageView = [[UIImageView alloc] init];
     [self.iconImageView setTranslatesAutoresizingMaskIntoConstraints:NO];
-    
-    // =========== 新增代码：为图标添加点击手势 ===========
-    self.iconImageView.userInteractionEnabled = YES;
-    UITapGestureRecognizer *iconTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(didTapIconImageView:)];
-    [self.iconImageView addGestureRecognizer:iconTap];
-    // ===============================================
-
     [containerView addSubview:self.iconImageView];
     [self.iconImageView.leadingAnchor constraintEqualToAnchor:containerView.leadingAnchor constant:15].active = YES;
     [self.iconImageView.topAnchor constraintEqualToAnchor:containerView.topAnchor constant:15].active = YES;
     [self.iconImageView.widthAnchor constraintEqualToConstant:58].active = YES;
     [self.iconImageView.heightAnchor constraintEqualToConstant:58].active = YES;
+
+    // =========== 核心修复：添加透明 UIButton 覆盖在图标上方接收点击 ===========
+    UIButton *iconButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    iconButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [iconButton addTarget:self action:@selector(didTapIconImageView:) forControlEvents:UIControlEventTouchUpInside];
+    [containerView addSubview:iconButton];
+    [iconButton.leadingAnchor constraintEqualToAnchor:self.iconImageView.leadingAnchor].active = YES;
+    [iconButton.topAnchor constraintEqualToAnchor:self.iconImageView.topAnchor].active = YES;
+    [iconButton.widthAnchor constraintEqualToAnchor:self.iconImageView.widthAnchor].active = YES;
+    [iconButton.heightAnchor constraintEqualToAnchor:self.iconImageView.heightAnchor].active = YES;
+    // ====================================================================
+
     self.nameLabel = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.nameLabel addTarget:self action:@selector(didTapNameButton:) forControlEvents:UIControlEventTouchUpInside];
     self.nameLabel.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
@@ -600,12 +605,12 @@
 
 #pragma mark - Custom Icon Replacement (新增功能模块)
 
-- (void)didTapIconImageView:(UITapGestureRecognizer *)gesture {
+- (void)didTapIconImageView:(id)sender {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"更换桌面图标" message:@"选择一张图片替换当前App在桌面上的图标缓存（不修改原App文件）" preferredStyle:UIAlertControllerStyleActionSheet];
 
     [alert addAction:[UIAlertAction actionWithTitle:@"从相册选择" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         UIImagePickerController *picker = [[UIImagePickerController alloc] init];
-        picker.delegate = self;
+        picker.delegate = (id<UIImagePickerControllerDelegate, UINavigationControllerDelegate>)self;
         picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
         picker.allowsEditing = YES;
         [self presentViewController:picker animated:YES completion:nil];
