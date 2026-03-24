@@ -10,6 +10,7 @@
 #import "ADDataViewController.h"
 #import "ADActionsBarView.h"
 #import "ADTitleSectionHeaderView.h"
+#import <dlfcn.h>
 
 @implementation ADMainDataSource
 
@@ -185,13 +186,59 @@
                     }
                 }];
                 
-                // 5. Downgrade App (原生降级组件)
+                // 5. Downgrade App (原生降级组件 - 带有完整账号校验UI)
                 UIImage *downgradeIcon = nil;
                 if (@available(iOS 13.0, *)) { downgradeIcon = [UIImage systemImageNamed:@"arrow.down.circle"]; }
                 else { downgradeIcon = [ADHelper imageNamed:@"OffloadApp"]; }
                 
                 [actionsBar addItemWithTitle:@"降级应用" detail:@"版本回退" image:downgradeIcon handler:^{
                     if (self.appData.isApplication) {
+                        
+                        // === 点击后：详细校验 Apple ID 归属并获取账号信息 ===
+                        NSString *bundlePath = self.appData.bundleURL.path;
+                        NSString *containerPath = [bundlePath stringByDeletingLastPathComponent];
+                        NSString *metadataPath = [containerPath stringByAppendingPathComponent:@"iTunesMetadata.plist"];
+                        
+                        NSString *purchaserAccountEmail = @"未知账号";
+                        if ([[NSFileManager defaultManager] fileExistsAtPath:metadataPath]) {
+                            NSDictionary *metadata = [NSDictionary dictionaryWithContentsOfFile:metadataPath];
+                            NSDictionary *downloadInfo = metadata[@"com.apple.iTunesStore.downloadInfo"];
+                            NSDictionary *accountInfo = downloadInfo[@"accountInfo"];
+                            if (accountInfo[@"AppleID"]) {
+                                purchaserAccountEmail = accountInfo[@"AppleID"];
+                            }
+                        }
+                        
+                        dlopen("/System/Library/PrivateFrameworks/StoreServices.framework/StoreServices", RTLD_LAZY);
+                        Class SSAccountStoreClass = NSClassFromString(@"SSAccountStore");
+                        NSString *activeAccountEmail = @"未登录";
+                        if (SSAccountStoreClass) {
+                            id store = [SSAccountStoreClass performSelector:@selector(defaultStore)];
+                            NSArray *accounts = [store performSelector:@selector(accounts)];
+                            for (id account in accounts) {
+                                if ([[account performSelector:@selector(isActive)] boolValue] && ![[account performSelector:@selector(isLocalAccount)] boolValue]) {
+                                    NSString *accName = [account performSelector:@selector(accountName)];
+                                    if (accName) activeAccountEmail = accName;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // 判断是否匹配（忽略大小写）
+                        BOOL isVerified = ([activeAccountEmail caseInsensitiveCompare:purchaserAccountEmail] == NSOrderedSame);
+                        
+                        if (!isVerified) {
+                            // 账号不符：弹出与图片一模一样的警告弹窗
+                            NSString *errorMessage = [NSString stringWithFormat:@"账号不匹配。\n\n此应用由账号\n%@ 下载。\n\n当前登录的账号是\n%@。\n\n请切换到正确的 App Store 账号后再试。", purchaserAccountEmail, activeAccountEmail];
+                            
+                            UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"无法降级" message:errorMessage preferredStyle:UIAlertControllerStyleAlert];
+                            [alertController addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+                            [self.dataViewController presentViewController:alertController animated:YES completion:nil];
+                            
+                            return; // 结束执行，不再弹出选择降级方式
+                        }
+                        // ==========================================
+                        
                         UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"降级应用" message:@"请选择降级的获取方式" preferredStyle:UIAlertControllerStyleAlert];
                         
                         // 原生：服务器获取
@@ -217,7 +264,6 @@
                                         return;
                                     }
                                     
-                                    // 原生弹窗显示可用版本
                                     UIAlertController *versionAlert = [UIAlertController alertControllerWithTitle:@"选择版本" message:@"请选择要降级的版本" preferredStyle:UIAlertControllerStyleActionSheet];
                                     NSArray *sortedVersions = [versions sortedArrayUsingDescriptors:@[[NSSortDescriptor sortDescriptorWithKey:@"release_date" ascending:NO]]];
                                     for (NSDictionary *ver in sortedVersions) {
@@ -231,7 +277,6 @@
                                     }
                                     [versionAlert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
                                     
-                                    // 适配 iPad 防止崩溃
                                     if (versionAlert.popoverPresentationController) {
                                         versionAlert.popoverPresentationController.sourceView = self.dataViewController.view;
                                         versionAlert.popoverPresentationController.sourceRect = CGRectMake(self.dataViewController.view.bounds.size.width/2, self.dataViewController.view.bounds.size.height/2, 1, 1);
@@ -246,7 +291,7 @@
                         [alertController addAction:[UIAlertAction actionWithTitle:@"自定义版本号" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
                             NSInteger itemIndex = 4;
                             [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
-                            [weakActionsBar setDetail:@"环境校验..." forItemAtIndex:itemIndex];
+                            [weakActionsBar setDetail:@"加载中..." forItemAtIndex:itemIndex];
                             
                             [self.appData fetchDowngradeTrackIDWithCompletion:^(long long trackId, NSError *error) {
                                 [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
@@ -308,21 +353,14 @@
                     [actionsBar setItemEnabled:NO atIndex:3]; // 重置权限
                     [actionsBar setItemEnabled:NO atIndex:4]; // 降级应用
                 } else {
-                    // 异步进行账号归属权校验，只有账号匹配的才可以亮起降级按钮
-                    [actionsBar setItemEnabled:NO atIndex:4];
-                    [actionsBar setDetail:@"校验账号..." forItemAtIndex:4];
-                    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                        BOOL isVerified = [self.appData isAppOwnershipVerified];
-                        dispatch_async(dispatch_get_main_queue(), ^{
-                            if (isVerified) {
-                                [actionsBar setItemEnabled:YES atIndex:4];
-                                [actionsBar setDetail:@"版本回退" forItemAtIndex:4];
-                            } else {
-                                [actionsBar setItemEnabled:NO atIndex:4];
-                                [actionsBar setDetail:@"账号不符" forItemAtIndex:4];
-                            }
-                        });
-                    });
+                    // 判断是否为 App Store 商店应用，如果是则亮起
+                    if ([self.appData hasAppStoreApp]) {
+                        [actionsBar setItemEnabled:YES atIndex:4];
+                        [actionsBar setDetail:@"版本回退" forItemAtIndex:4];
+                    } else {
+                        [actionsBar setItemEnabled:NO atIndex:4];
+                        [actionsBar setDetail:@"非商店应用" forItemAtIndex:4];
+                    }
                 }
                 
                 if (!self.appData.isDeletable) {
