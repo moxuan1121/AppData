@@ -228,6 +228,15 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
             appData.iconView = iconView;
             
             [[UISelectionFeedbackGenerator new] selectionChanged];
+
+
+ // 👇========= 将修复代码添加在这里 =========👇
+            UIWindow *touchWindow = iconView.window ?: [UIApplication sharedApplication].keyWindow;
+            touchWindow.userInteractionEnabled = NO;
+            touchWindow.userInteractionEnabled = YES;
+            // 👆====================================👆
+
+
             
             ADDataViewController *dataViewController = [[ADDataViewController alloc] initWithAppData:appData];
             if (IS_IPAD) {
