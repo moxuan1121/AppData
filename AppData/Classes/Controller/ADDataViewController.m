@@ -39,6 +39,7 @@
 @property (nonatomic, assign) BOOL isCopyingIdentifier;
 
 @property (nonatomic, strong) UIScreenEdgePanGestureRecognizer *screenEdgeGesture;
+@property (nonatomic, weak) UIScrollView *desktopScrollView;
 
 @end
 
@@ -219,7 +220,10 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
         }
         
         if (!bundleID) {
-            [self showAlertFromViewController:rootController title:@"AppData" message:@"Could not fetch bundle ID." cancelTitle:@"Okay"];
+            [self showAlertFromViewController:rootController
+                                        title:@"AppData"
+                                      message:@"Could not fetch bundle ID."
+                                  cancelTitle:@"Okay"];
             return;
         }
         
@@ -228,8 +232,24 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
             appData.iconView = iconView;
             
             [[UISelectionFeedbackGenerator new] selectionChanged];
-            
             ADDataViewController *dataViewController = [[ADDataViewController alloc] initWithAppData:appData];
+            
+            // ================= 新增：拦截桌面滑动 =================
+            UIView *superview = iconView.superview;
+            while (superview) {
+                if ([superview isKindOfClass:NSClassFromString(@"SBIconScrollView")] || [superview isKindOfClass:[UIScrollView class]]) {
+                    UIScrollView *scrollView = (UIScrollView *)superview;
+                    dataViewController.desktopScrollView = scrollView;
+                    // 禁用再启用 pan 手势，强制打断当前的手指滑动事件追踪
+                    scrollView.panGestureRecognizer.enabled = NO;
+                    scrollView.panGestureRecognizer.enabled = YES;
+                    scrollView.scrollEnabled = NO; // 临时禁用滚动
+                    break;
+                }
+                superview = superview.superview;
+            }
+            // ====================================================
+
             if (IS_IPAD) {
                 dataViewController.contentView.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner | kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
                 dataViewController.presentationManager.configuration.fadeAnimationAlpha = 0;
@@ -295,6 +315,13 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
         self.dockDismissed = NO;
         [self.class presentFloatingDockIfNeeded];
     }
+    
+    // ================= 新增：恢复桌面滑动 =================
+    if (self.desktopScrollView) {
+        self.desktopScrollView.scrollEnabled = YES;
+    }
+    // ====================================================
+    
     [self dismissViewControllerAnimated:animated completion:completion];
 }
 
