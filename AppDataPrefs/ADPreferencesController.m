@@ -2,8 +2,6 @@
 //  ADPreferencesController.m
 //  AppDataPrefs
 //
-//  Created by Fouad Raheb on 3/29/21.
-//
 
 #import "ADPreferencesController.h"
 #import "ADSettings.h"
@@ -24,7 +22,13 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleGrouped];
+    // ================= 修改点 1：实现四个角圆圆的卡片风格 =================
+    UITableViewStyle style = UITableViewStyleGrouped;
+    if (@available(iOS 13.0, *)) {
+        style = UITableViewStyleInsetGrouped; // iOS 13+ 的圆角分组样式
+    }
+    
+    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:style];
     self.tableView.delegate = self;
     self.tableView.dataSource = self;
     [self.view addSubview:self.tableView];
@@ -57,20 +61,21 @@
     }
 }
 
+// ================= 修改点 2：设置选项全面汉化 =================
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(nonnull NSIndexPath *)indexPath {
     if (indexPath.section == 0) {
         ADHeaderTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:ADHeaderTableViewCell.reuseIdentifier];
         cell.titleLabel.text = @"AppData";
-        cell.detailLabel.text = @"View & Manage Apps Data from Homescreen";
+        cell.detailLabel.text = @"在主屏幕查看与管理应用数据";
         return cell;
     } else if (indexPath.section == 1) {
         if (indexPath.row == 0) {
             ADSwitchTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:ADSwitchTableViewCell.reuseIdentifier];
-            [cell configureWithTitle:@"Swipe Up" switchKey:kSwipeUpEnabled];
+            [cell configureWithTitle:@"向上滑动图标" switchKey:kSwipeUpEnabled];
             return cell;
         } else if (indexPath.row == 1) {
             ADSwitchTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:ADSwitchTableViewCell.reuseIdentifier];
-            [cell configureWithTitle:@"Force Touch Menu" switchKey:kForceTouchMenuEnabled];
+            [cell configureWithTitle:@"三维触控菜单 (Haptic Touch)" switchKey:kForceTouchMenuEnabled];
             return cell;
         }
     } else if (indexPath.section == 2) {
@@ -78,7 +83,7 @@
         if (!cell) {
             cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"AppearanceCellIdentifier"];
             cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-            cell.textLabel.text = @"Appearance";
+            cell.textLabel.text = @"面板外观";
         }
         cell.detailTextLabel.text = [ADSettings titleForAppearanceStyle:[ADSettings integerForKey:kAppearance]];
         return cell;
@@ -87,7 +92,7 @@
         if (!cell) {
             cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"InfoCellIdentifier"];
             cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-            cell.textLabel.text = @"Info";
+            cell.textLabel.text = @"使用说明";
         }
         return cell;
     } else if (indexPath.section == 4) {
@@ -100,7 +105,7 @@
             cell.textLabel.text = @"Fouad Raheb";
             cell.detailTextLabel.text = @"Twitter";
         } else if (indexPath.row == 1) {
-            cell.textLabel.text = @"Source Code";
+            cell.textLabel.text = @"源代码";
             cell.detailTextLabel.text = @"GitHub";
         }
         return cell;
@@ -110,16 +115,16 @@
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     switch (section) {
-        case 1: return @"Activation";
+        case 1: return @"激活方式";
         case 2: return nil;
-        case 4: return @"Developer";
+        case 4: return @"开发者";
         default: return nil;
     }
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     switch (section) {
-        case 1: return @"The popup can be activated by either swiping up on the app icon or through a button in the force touch menu";
+        case 1: return @"可以通过向上滑动应用图标，或者点击重按图标弹出的菜单中的按钮来激活 AppData 面板。";
         default: return nil;
     }
 }
@@ -137,13 +142,20 @@
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if (indexPath.section == 2) {
         UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
-        ADSelectListTableViewController *listController = [[ADSelectListTableViewController alloc] initWithStyle:UITableViewStyleGrouped
-                                                                                                           title:@"Appearance"
-                                                                                                           items:[ADSettings appearanceTitles]
-                                                                                                          values:[ADSettings appearanceValues]
-                                                                                                    currentValue:[NSString stringWithFormat:@"%td",[ADSettings appearanceStyle]]
-                                                                                                 popViewOnSelect:YES
-                                                                                                     changeBlock:^(NSString *value) {
+        
+        // 二级页面也应用圆角风格
+        UITableViewStyle style = UITableViewStyleGrouped;
+        if (@available(iOS 13.0, *)) {
+            style = UITableViewStyleInsetGrouped;
+        }
+        
+        ADSelectListTableViewController *listController = [[ADSelectListTableViewController alloc] initWithStyle:style
+                                                                                                       title:@"面板外观"
+                                                                                                       items:[ADSettings appearanceTitles]
+                                                                                                      values:[ADSettings appearanceValues]
+                                                                                                currentValue:[NSString stringWithFormat:@"%td",[ADSettings appearanceStyle]]
+                                                                                             popViewOnSelect:YES
+                                                                                                 changeBlock:^(NSString *value) {
             [ADSettings setInteger:[value integerValue] forKey:kAppearance];
             cell.detailTextLabel.text = [ADSettings titleForAppearanceStyle:[value integerValue]];
         }];
@@ -161,11 +173,16 @@
 
 @end
 
+// ================= 修改点 3：说明页面的圆角与汉化 =================
 @implementation ADPreferencesInfoViewController
 
 - (instancetype)initWithStyle:(UITableViewStyle)style {
-    if (self = [super initWithStyle:UITableViewStyleGrouped]) {
-        self.title = @"Info";
+    UITableViewStyle insetStyle = UITableViewStyleGrouped;
+    if (@available(iOS 13.0, *)) {
+        insetStyle = UITableViewStyleInsetGrouped; // 圆角
+    }
+    if (self = [super initWithStyle:insetStyle]) {
+        self.title = @"使用说明";
     }
     return self;
 }
@@ -175,11 +192,11 @@
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    return @"- Copy the app bundle Identifier by tapping it\n\
-- Edit app icon name by tapping it\n\
-- Filza is required to open folders\n\
-- Clearing Caches will delete the app's \"Caches\" and \"Tmp\" folders\n\
-- Clearing app data will delete Library/Documents/Tmp folders and reset permissions";
+    return @"- 点击包名(Bundle ID)即可复制\n\
+- 点击图标名称即可修改名称\n\
+- 打开文件夹目录需要安装 Filza 插件或应用\n\
+- 清理缓存将删除应用沙盒下的 Caches 和 Tmp 文件夹\n\
+- 清理应用数据将删除 Library、Documents 和 Tmp 文件夹，并重置应用权限";
 }
 
 @end
