@@ -242,7 +242,7 @@
         [alert addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             long long versionId = [ver[@"external_identifier"] longLongValue];
             [self downgrade_installWithTrackID:trackId versionID:versionId];
-            [self showDowngradeMessage:@"降级任务已提交至 App Store 下载队列，请回到桌面查看进度。" title:@"已发起降级"];
+            [self showDowngradeMessage:@"降级任务已提交至 App Store，等待验证账户" title:@"已发起降级"];
         }]];
     }
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
