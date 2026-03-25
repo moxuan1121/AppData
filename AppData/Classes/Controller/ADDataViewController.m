@@ -830,6 +830,7 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
     }
 
     [self refreshSBIcon];
+    [self dismiss];
 }
 
 - (void)refreshSBIcon {
