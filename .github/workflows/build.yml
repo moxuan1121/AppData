@@ -146,8 +146,8 @@ jobs:
           # 打包 Rootless
           dpkg-deb -Zgzip -b Package_Rootless AppData-Rootless.deb
 
-          - name: Package Roothide DEB
-          run: |
+      - name: Package Roothide DEB
+        run: |
           # 复制 Rootful 目录作为 Roothide 基础
           cp -r Package Package_Roothide
           
