@@ -22,7 +22,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    // ================= 修改点 1：实现四个角圆圆的卡片风格 =================
+    // 实现四个角圆圆的卡片风格
     UITableViewStyle style = UITableViewStyleGrouped;
     if (@available(iOS 13.0, *)) {
         style = UITableViewStyleInsetGrouped; // iOS 13+ 的圆角分组样式
@@ -56,12 +56,11 @@
         case 1: return 2;
         case 2: return 1;
         case 3: return 1;
-        case 4: return 2;
+        case 4: return 3; // 修改点：将开发者区块的行数改为 3
         default: return 0;
     }
 }
 
-// ================= 修改点 2：设置选项全面汉化 =================
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(nonnull NSIndexPath *)indexPath {
     if (indexPath.section == 0) {
         ADHeaderTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:ADHeaderTableViewCell.reuseIdentifier];
@@ -75,7 +74,7 @@
             return cell;
         } else if (indexPath.row == 1) {
             ADSwitchTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:ADSwitchTableViewCell.reuseIdentifier];
-            [cell configureWithTitle:@"三维触控菜单 (Haptic Touch)" switchKey:kForceTouchMenuEnabled];
+            [cell configureWithTitle:@"三维触控菜单" switchKey:kForceTouchMenuEnabled];
             return cell;
         }
     } else if (indexPath.section == 2) {
@@ -107,6 +106,9 @@
         } else if (indexPath.row == 1) {
             cell.textLabel.text = @"源代码";
             cell.detailTextLabel.text = @"GitHub";
+        } else if (indexPath.row == 2) { // 修改点：新增二改开发显示栏
+            cell.textLabel.text = @"二改开发";
+            cell.detailTextLabel.text = @"iosdump";
         }
         return cell;
     }
@@ -143,7 +145,6 @@
     if (indexPath.section == 2) {
         UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
         
-        // 二级页面也应用圆角风格
         UITableViewStyle style = UITableViewStyleGrouped;
         if (@available(iOS 13.0, *)) {
             style = UITableViewStyleInsetGrouped;
@@ -167,13 +168,14 @@
             [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://twitter.com/FouadRaheb"] options:@{} completionHandler:nil];
         } else if (indexPath.item == 1) {
             [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://github.com/FouadRaheb/AppData"] options:@{} completionHandler:nil];
+        } else if (indexPath.item == 2) { // 修改点：新增二改开发的跳转链接
+            [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://t.me/iosdumpzzz"] options:@{} completionHandler:nil];
         }
     }
 }
 
 @end
 
-// ================= 修改点 3：说明页面的圆角与汉化 =================
 @implementation ADPreferencesInfoViewController
 
 - (instancetype)initWithStyle:(UITableViewStyle)style {
@@ -193,7 +195,8 @@
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     return @"- 点击包名(Bundle ID)即可复制\n\
-- 点击图标名称即可修改名称\n\
+- 单击图标即可修改图标\n\   
+- 点击名称即可修改名称\n\
 - 打开文件夹目录需要安装 Filza 插件或应用\n\
 - 清理缓存将删除应用沙盒下的 Caches 和 Tmp 文件夹\n\
 - 清理应用数据将删除 Library、Documents 和 Tmp 文件夹，并重置应用权限";
