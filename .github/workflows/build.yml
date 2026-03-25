@@ -146,6 +146,21 @@ jobs:
           # 打包 Rootless
           dpkg-deb -Zgzip -b Package_Rootless AppData-Rootless.deb
 
+          - name: Package Roothide DEB
+          run: |
+          # 复制 Rootful 目录作为 Roothide 基础
+          cp -r Package Package_Roothide
+          
+          # 修改为 Roothide 架构
+          sed -i '' 's/Architecture: iphoneos-arm/Architecture: iphoneos-arm64e/g' Package_Roothide/DEBIAN/control
+          
+          # 迁移到 /var/jb
+          mkdir -p Package_Roothide/var/jb
+          mv Package_Roothide/Library Package_Roothide/var/jb/
+          
+          # 打包 Roothide
+          dpkg-deb -Zgzip -b Package_Roothide AppData-Roothide.deb
+
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
