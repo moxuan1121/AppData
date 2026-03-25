@@ -242,7 +242,7 @@
         [alert addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             long long versionId = [ver[@"external_identifier"] longLongValue];
             [self downgrade_installWithTrackID:trackId versionID:versionId];
-            [self showDowngradeMessage:@"降级任务已提交，等待验证账户。" title:@"已发起降级"];
+            [self showDowngradeMessage:@"降级任务已提交至 App Store 下载队列，请回到桌面查看进度。" title:@"已发起降级"];
         }]];
     }
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
@@ -518,7 +518,10 @@
                             [inputAlert addAction:[UIAlertAction actionWithTitle:@"降级" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
                                 NSString *vidStr = inputAlert.textFields.firstObject.text;
                                 long long versionId = [vidStr longLongValue];
-                                if (versionId <= 0) return;
+                                if (versionId <= 0) {
+                                    [self showDowngradeMessage:@"请输入正确的版本号" title:@"输入错误"];
+                                    return;
+                                }
 
                                 [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
                                 [weakActionsBar setDetail:@"验证账号..." forItemAtIndex:itemIndex];
@@ -542,15 +545,47 @@
                                             return;
                                         }
 
-                                        [weakActionsBar setDetail:@"触发下载..." forItemAtIndex:itemIndex];
-                                        [self downgrade_installWithTrackID:trackId versionID:versionId];
-                                        [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
-                                        [weakActionsBar setDetail:@"已发起!" forItemAtIndex:itemIndex];
-                                        [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
-                                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                                            [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
-                                        });
-                                        [self showDowngradeMessage:@"降级任务已提交至 App Store，等待验证账户。" title:@"已发起降级"];
+                                        [weakActionsBar setDetail:@"验证版本..." forItemAtIndex:itemIndex];
+                                        [self downgrade_fetchVersionsForTrackID:trackId completion:^(NSArray *versions, NSError *err) {
+                                            if (err || ![versions isKindOfClass:[NSArray class]]) {
+                                                [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
+                                                [weakActionsBar setDetail:@"获取失败" forItemAtIndex:itemIndex];
+                                                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                                                    [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
+                                                });
+                                                [self showDowngradeMessage:err ? err.localizedDescription : @"获取历史版本失败" title:@"验证失败"];
+                                                return;
+                                            }
+
+                                            BOOL found = NO;
+                                            for (NSDictionary *ver in versions) {
+                                                long long extId = [ver[@"external_identifier"] longLongValue];
+                                                if (extId == versionId) {
+                                                    found = YES;
+                                                    break;
+                                                }
+                                            }
+
+                                            if (!found) {
+                                                [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
+                                                [weakActionsBar setDetail:@"无效版本" forItemAtIndex:itemIndex];
+                                                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                                                    [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
+                                                });
+                                                [self showDowngradeMessage:@"输入的版本号不存在" title:@"无效版本号"];
+                                                return;
+                                            }
+
+                                            [weakActionsBar setDetail:@"触发下载..." forItemAtIndex:itemIndex];
+                                            [self downgrade_installWithTrackID:trackId versionID:versionId];
+                                            [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
+                                            [weakActionsBar setDetail:@"已发起!" forItemAtIndex:itemIndex];
+                                            [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
+                                            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                                                [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
+                                            });
+                                            [self showDowngradeMessage:@"降级任务已提交至 App Store，等待验证账户。" title:@"已发起降级"];
+                                        }];
                                     }];
                                 }];
                             }]];
@@ -597,13 +632,11 @@
                     }
                 }];
 
-                // 基础启用状态
                 if (!self.appData.isApplication) {
                     [actionsBar setItemEnabled:NO atIndex:2];
                     [actionsBar setItemEnabled:NO atIndex:3];
                 }
 
-                // --- 核心逻辑：判断是否为 App Store 应用 ---
                 if ([self.appData hasAppStoreApp]) {
                     [actionsBar setItemEnabled:YES atIndex:4];
                     [actionsBar setDetail:@"版本回退" forItemAtIndex:4];
@@ -616,14 +649,12 @@
                     [actionsBar setItemEnabled:NO atIndex:5];
                 }
 
-                // Set Cache Size
                 [actionsBar showLoadingIndicatorForItemAtIndex:1];
                 [self.appData getCachesDirectorySizeWithCompletion:^(NSString *formattedSize) {
                     [actionsBar setDetail:formattedSize forItemAtIndex:1];
                     [actionsBar hideLoadingIndicatorForItemAtIndex:1];
                 }];
 
-                // Set App Data Size
                 [actionsBar showLoadingIndicatorForItemAtIndex:2];
                 [self.appData getAppUsageDirectorySizeWithCompletion:^(NSString *formattedSize) {
                     [actionsBar setDetail:formattedSize forItemAtIndex:2];
