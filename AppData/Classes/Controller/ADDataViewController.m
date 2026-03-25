@@ -617,23 +617,23 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
 }
 
 - (void)showCustomIconNameInterface {
-    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"Rename" message:@"Enter an app icon name" preferredStyle:UIAlertControllerStyleAlert];
-    [alertController addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"修改名称" message:@"输入新的应用图标名称" preferredStyle:UIAlertControllerStyleAlert];
+    [alertController addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
         if (self.dockDismissed && IS_IPAD) [self.class presentFloatingDockIfNeeded];
     }]];
-    [alertController addAction:[UIAlertAction actionWithTitle:@"Change" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [alertController addAction:[UIAlertAction actionWithTitle:@"修改" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self.appData setCustomIconName:alertController.textFields.firstObject.text];
         [self.nameLabel setTitle:self.appData.name forState:UIControlStateNormal];
         if (self.dockDismissed && IS_IPAD) [self.class presentFloatingDockIfNeeded];
     }]];
-    [alertController addAction:[UIAlertAction actionWithTitle:@"Reset" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [alertController addAction:[UIAlertAction actionWithTitle:@"重置" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self.appData setCustomIconName:nil];
         [self.nameLabel setTitle:self.appData.name forState:UIControlStateNormal];
         if (self.dockDismissed && IS_IPAD) [self.class presentFloatingDockIfNeeded];
     }]];
     [alertController addTextFieldWithConfigurationHandler:^(UITextField *textField) {
         textField.clearButtonMode = UITextFieldViewModeAlways;
-        textField.placeholder = @"Icon Name";
+        textField.placeholder = @"应用名称";
         textField.text = self.nameLabel.titleLabel.text;
     }];
     if (IS_IPAD) {
