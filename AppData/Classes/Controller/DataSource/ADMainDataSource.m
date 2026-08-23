@@ -439,11 +439,26 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
 - (BOOL)switchStoreAccountTo:(SSAccount *)targetAccount error:(NSError **)error {
     if (!targetAccount) return NO;
     SSAccountStore *store = [objc_getClass("SSAccountStore") defaultStore];
-    for (SSAccount *account in [store accounts]) {
+    NSArray *accounts = [store accounts];
+    SSAccount *previousAccount = [self downgrade_activeStoreAccountFromStore:store];
+    for (SSAccount *account in accounts) {
         [account setActive:(account == targetAccount)];
     }
-    BOOL saved = [store saveAccount:targetAccount verifyCredentials:NO error:error];
-    if (!saved || (error && *error)) return NO;
+
+    // This must verify through StoreServices. With NO, the account becomes active
+    // before the system password sheet finishes and the original downgrade request
+    // is resumed too early. StoreServices retains the authenticated account session;
+    // AppData never receives or stores the password itself.
+    BOOL saved = [store saveAccount:targetAccount verifyCredentials:YES error:error];
+    if (!saved || (error && *error)) {
+        for (SSAccount *account in accounts) {
+            [account setActive:(account == previousAccount)];
+        }
+        if (previousAccount) {
+            [store saveAccount:previousAccount verifyCredentials:NO error:nil];
+        }
+        return NO;
+    }
 
     NSString *accountName = [targetAccount accountName];
     if (accountName.length > 0) {
@@ -502,8 +517,13 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
             if (completion) completion(NO);
             return;
         }
-        [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
-        if (completion) completion(YES);
+        // Let StoreServices publish the new authenticated account/storefront before
+        // rebuilding the purchase request. The password sheet has completed when
+        // saveAccount:verifyCredentials:error: returns successfully.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.75 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
+            if (completion) completion(YES);
+        });
     }]];
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
         [self.dataViewController presentViewController:alert animated:YES completion:nil];
