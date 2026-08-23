@@ -31,6 +31,14 @@ Only public version metadata is queried from these providers. Existing on-device
 StoreServices code submits the selected external version ID; this project does
 not send Apple credentials, cookies, DSIDs, or tokens to a history provider.
 
+## Package removal safety
+
+The package identifier is `com.moxuan.appdata` and it replaces the former
+`com.iosdump.appdata` package. RootHide removal scripts keep ElleKit's shared
+`/var/jb/Library/MobileSubstrate/DynamicLibraries` path present while dpkg
+removes AppData, then restore the canonical link to `/var/jb/usr/lib/TweakInject`
+when necessary. No ElleKit binary, loader, or package is removed by AppData.
+
 ## Screenshot
 
 <img src="https://raw.githubusercontent.com/FouadRaheb/AppData/master/Screenshots/1.jpg" width="350"> <img src="https://raw.githubusercontent.com/FouadRaheb/AppData/master/Screenshots/2.jpg" width="350">

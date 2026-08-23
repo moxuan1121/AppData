@@ -129,11 +129,22 @@ jobs:
           # RootHide 使用 iphoneos-arm64e 架构和 /var/jb 根路径
           sed -i '' 's/Architecture: iphoneos-arm/Architecture: iphoneos-arm64e/g' Package_RootHide/DEBIAN/control
           sed -i '' 's#Icon: file:///Library/#Icon: file:///var/jb/Library/#g' Package_RootHide/DEBIAN/control
+          chmod 0755 Package_RootHide/DEBIAN/prerm Package_RootHide/DEBIAN/postrm
           
           mkdir -p Package_RootHide/var/jb
           mv Package_RootHide/Library Package_RootHide/var/jb/
           
           dpkg-deb -Zgzip -b Package_RootHide AppData-RootHide.deb
+
+          # Verify package identity and removal-safety scripts in the final DEB.
+          test "$(dpkg-deb -f AppData-RootHide.deb Package)" = "com.moxuan.appdata"
+          test "$(dpkg-deb -f AppData-RootHide.deb Architecture)" = "iphoneos-arm64e"
+          verify_dir="$(mktemp -d)"
+          dpkg-deb -e AppData-RootHide.deb "$verify_dir"
+          test -x "$verify_dir/prerm"
+          test -x "$verify_dir/postrm"
+          grep -q '/var/jb/Library/MobileSubstrate/DynamicLibraries' "$verify_dir/prerm"
+          grep -q '/var/jb/usr/lib/TweakInject' "$verify_dir/postrm"
 
       - name: Upload Dopamine RootHide DEB
         uses: actions/upload-artifact@v4

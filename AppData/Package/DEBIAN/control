@@ -1,11 +1,12 @@
-Package: com.iosdump.appdata
+Package: com.moxuan.appdata
 Name: AppData
 Version: 1.8.8
 Description: 从主屏幕查看和管理应用数据
 Section: Tweaks
 Depends: firmware (>= 11.0), mobilesubstrate, preferenceloader
-Conflicts:com.netskao.appdatas, com.netskao.appdata, cn.zqbb.appdata, com.fouadraheb.appdata
+Conflicts: com.iosdump.appdata, com.netskao.appdatas, com.netskao.appdata, cn.zqbb.appdata, com.fouadraheb.appdata
+Replaces: com.iosdump.appdata
 Architecture: iphoneos-arm
 Author: Fouad Raheb
-Maintainer: iosdump
+Maintainer: moxuan
 Icon: file:///Library/PreferenceBundles/AppDataPrefs.bundle/AppData@3x.png

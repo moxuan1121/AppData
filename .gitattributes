@@ -1,0 +1,3 @@
+AppData/Package/DEBIAN/control text eol=lf
+AppData/Package/DEBIAN/prerm text eol=lf
+AppData/Package/DEBIAN/postrm text eol=lf

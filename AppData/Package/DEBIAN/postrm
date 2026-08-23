@@ -1,0 +1,24 @@
+#!/bin/sh
+
+# Restore the shared injection path after removal or an identifier migration.
+# Prefer ElleKit's canonical symlink when its target exists; otherwise retain a
+# directory so the loader's integrity check never observes a missing path.
+inject_dir="/var/jb/Library/MobileSubstrate/DynamicLibraries"
+inject_parent="/var/jb/Library/MobileSubstrate"
+ellekit_target="/var/jb/usr/lib/TweakInject"
+keep_file="$inject_dir/.com.moxuan.appdata.keep"
+
+if [ -e "$keep_file" ]; then
+    rm -f "$keep_file"
+fi
+
+if [ ! -e "$inject_dir" ] && [ ! -L "$inject_dir" ]; then
+    mkdir -p "$inject_parent"
+    if [ -d "$ellekit_target" ]; then
+        ln -s "$ellekit_target" "$inject_dir"
+    else
+        mkdir -p "$inject_dir"
+    fi
+fi
+
+exit 0
