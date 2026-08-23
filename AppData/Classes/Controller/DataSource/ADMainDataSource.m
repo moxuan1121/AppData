@@ -45,6 +45,106 @@
 @end
 // ===============================================================
 
+typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIdentifiers);
+
+@interface ADAppSelectionViewController : UITableViewController <UISearchResultsUpdating>
+@property (nonatomic, copy) NSArray<LSApplicationProxy *> *applications;
+@property (nonatomic, copy) NSArray<LSApplicationProxy *> *filteredApplications;
+@property (nonatomic, strong) NSMutableSet<NSString *> *selectedBundleIdentifiers;
+@property (nonatomic, copy) ADAppSelectionCompletion completion;
+@property (nonatomic, strong) UISearchController *searchController;
+- (instancetype)initWithSelectedBundleIdentifiers:(NSArray<NSString *> *)selected excludingBundleIdentifier:(NSString *)excluded completion:(ADAppSelectionCompletion)completion;
+@end
+
+@implementation ADAppSelectionViewController
+
+- (instancetype)initWithSelectedBundleIdentifiers:(NSArray<NSString *> *)selected excludingBundleIdentifier:(NSString *)excluded completion:(ADAppSelectionCompletion)completion {
+    if (self = [super initWithStyle:UITableViewStylePlain]) {
+        self.title = @"选择指定应用";
+        self.completion = completion;
+        self.selectedBundleIdentifiers = [NSMutableSet setWithArray:selected ?: @[]];
+        NSArray *installed = [[NSClassFromString(@"LSApplicationWorkspace") defaultWorkspace] allInstalledApplications] ?: @[];
+        if (excluded.length > 0) {
+            installed = [installed filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(LSApplicationProxy *app, NSDictionary *bindings) {
+                return ![app.bundleIdentifier isEqualToString:excluded];
+            }]];
+        }
+        self.applications = [installed sortedArrayUsingComparator:^NSComparisonResult(LSApplicationProxy *left, LSApplicationProxy *right) {
+            NSString *leftName = left.localizedName ?: left.bundleIdentifier;
+            NSString *rightName = right.localizedName ?: right.bundleIdentifier;
+            return [leftName localizedCaseInsensitiveCompare:rightName];
+        }];
+        self.filteredApplications = self.applications;
+    }
+    return self;
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"取消" style:UIBarButtonItemStylePlain target:self action:@selector(cancelSelection)];
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"完成" style:UIBarButtonItemStyleDone target:self action:@selector(finishSelection)];
+    self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
+    self.searchController.searchResultsUpdater = self;
+    self.searchController.obscuresBackgroundDuringPresentation = NO;
+    self.searchController.searchBar.placeholder = @"搜索应用名称或包标识符";
+    self.navigationItem.searchController = self.searchController;
+    self.navigationItem.hidesSearchBarWhenScrolling = NO;
+    self.tableView.tableFooterView = [UIView new];
+}
+
+- (void)cancelSelection {
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)finishSelection {
+    NSArray *selected = [[self.selectedBundleIdentifiers allObjects] sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
+    if (self.completion) self.completion(selected);
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)updateSearchResultsForSearchController:(UISearchController *)searchController {
+    NSString *query = searchController.searchBar.text;
+    if (query.length == 0) {
+        self.filteredApplications = self.applications;
+    } else {
+        NSPredicate *predicate = [NSPredicate predicateWithBlock:^BOOL(LSApplicationProxy *app, NSDictionary *bindings) {
+            return [app.localizedName localizedCaseInsensitiveContainsString:query]
+                || [app.bundleIdentifier localizedCaseInsensitiveContainsString:query];
+        }];
+        self.filteredApplications = [self.applications filteredArrayUsingPredicate:predicate];
+    }
+    [self.tableView reloadData];
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    return self.filteredApplications.count;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    static NSString *reuseIdentifier = @"ADRedirectAppCell";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:reuseIdentifier];
+    if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:reuseIdentifier];
+    LSApplicationProxy *app = self.filteredApplications[indexPath.row];
+    cell.textLabel.text = app.localizedName ?: app.bundleIdentifier;
+    cell.detailTextLabel.text = app.bundleIdentifier;
+    cell.accessoryType = [self.selectedBundleIdentifiers containsObject:app.bundleIdentifier]
+        ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
+    return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    LSApplicationProxy *app = self.filteredApplications[indexPath.row];
+    if ([self.selectedBundleIdentifiers containsObject:app.bundleIdentifier]) {
+        [self.selectedBundleIdentifiers removeObject:app.bundleIdentifier];
+    } else if (app.bundleIdentifier.length > 0) {
+        [self.selectedBundleIdentifiers addObject:app.bundleIdentifier];
+    }
+    [tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
+}
+
+@end
+
 @implementation ADMainDataSource
 
 - (instancetype)initWithAppData:(ADAppData *)data dataViewController:(ADDataViewController *)dataViewController {
@@ -61,10 +161,34 @@
     NSString *bundleIdentifier = self.appData.bundleIdentifier;
     BOOL blocksOutgoing = [ADSettings isBlockedFromLaunchingOtherApplications:bundleIdentifier];
     BOOL blocksIncoming = [ADSettings isBlockedFromBeingLaunched:bundleIdentifier];
-    if (blocksOutgoing && blocksIncoming) return @"双向禁止";
-    if (blocksOutgoing) return @"禁止跳出";
-    if (blocksIncoming) return @"禁止唤起";
-    return @"未启用";
+    NSString *summary = @"未启用";
+    if (blocksOutgoing && blocksIncoming) summary = @"双向禁止";
+    else if (blocksOutgoing) summary = @"禁止跳出";
+    else if (blocksIncoming) summary = @"禁止唤起";
+    NSUInteger customCount = [ADSettings customBlockedApplicationsForBundleIdentifier:bundleIdentifier].count;
+    return customCount > 0 ? [NSString stringWithFormat:@"%@ · 指定%tu个", summary, customCount] : summary;
+}
+
+- (void)showCustomBlockedApplicationPickerWithActionsBar:(ADActionsBarView *)actionsBar itemIndex:(NSInteger)itemIndex {
+    NSString *bundleIdentifier = self.appData.bundleIdentifier;
+    NSArray *selected = [ADSettings customBlockedApplicationsForBundleIdentifier:bundleIdentifier];
+    ADAppSelectionViewController *picker = [[ADAppSelectionViewController alloc]
+        initWithSelectedBundleIdentifiers:selected
+        excludingBundleIdentifier:bundleIdentifier
+        completion:^(NSArray<NSString *> *selectedBundleIdentifiers) {
+            [ADSettings setCustomBlockedApplications:selectedBundleIdentifiers forBundleIdentifier:bundleIdentifier];
+            [actionsBar setDetail:[self launchControlSummary] forItemAtIndex:itemIndex];
+        }];
+    UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:picker];
+    navigationController.modalPresentationStyle = UIModalPresentationPageSheet;
+    if (@available(iOS 15.0, *)) {
+        navigationController.sheetPresentationController.detents = @[
+            UISheetPresentationControllerDetent.mediumDetent,
+            UISheetPresentationControllerDetent.largeDetent
+        ];
+        navigationController.sheetPresentationController.prefersGrabberVisible = YES;
+    }
+    [self.dataViewController presentViewController:navigationController animated:YES completion:nil];
 }
 
 - (void)showLaunchControlMenuWithActionsBar:(ADActionsBarView *)actionsBar itemIndex:(NSInteger)itemIndex {
@@ -89,6 +213,16 @@
         [ADSettings setBlockedFromBeingLaunched:!blocksIncoming bundleIdentifier:bundleIdentifier];
         [actionsBar setDetail:[self launchControlSummary] forItemAtIndex:itemIndex];
         [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
+    }]];
+
+    NSUInteger customCount = [ADSettings customBlockedApplicationsForBundleIdentifier:bundleIdentifier].count;
+    NSString *customTitle = customCount > 0
+        ? [NSString stringWithFormat:@"选择指定应用（已选 %tu 个）", customCount]
+        : @"选择指定应用";
+    [menu addAction:[UIAlertAction actionWithTitle:customTitle style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.15 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            [self showCustomBlockedApplicationPickerWithActionsBar:actionsBar itemIndex:itemIndex];
+        });
     }]];
     [menu addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
 

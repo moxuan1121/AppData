@@ -167,9 +167,26 @@
     [self setLaunchControlValue:blocked prefix:kBlockedFromBeingLaunchedPrefix bundleIdentifier:bundleIdentifier];
 }
 
++ (NSArray<NSString *> *)customBlockedApplicationsForBundleIdentifier:(NSString *)bundleIdentifier {
+    NSString *key = [self launchControlKeyWithPrefix:kCustomBlockedApplicationsPrefix bundleIdentifier:bundleIdentifier];
+    id value = key ? [self objectForKey:key] : nil;
+    return [value isKindOfClass:[NSArray class]] ? value : @[];
+}
+
++ (void)setCustomBlockedApplications:(NSArray<NSString *> *)applications forBundleIdentifier:(NSString *)bundleIdentifier {
+    NSString *key = [self launchControlKeyWithPrefix:kCustomBlockedApplicationsPrefix bundleIdentifier:bundleIdentifier];
+    if (!key) return;
+    NSArray *uniqueApplications = [[[NSSet setWithArray:applications ?: @[]] allObjects]
+        sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
+    [self setObject:uniqueApplications forKey:key];
+}
+
 + (BOOL)shouldBlockSourceBundleIdentifier:(NSString *)sourceBundleIdentifier targetBundleIdentifier:(NSString *)targetBundleIdentifier {
     if (sourceBundleIdentifier.length == 0 || targetBundleIdentifier.length == 0) return NO;
     if ([sourceBundleIdentifier isEqualToString:targetBundleIdentifier]) return NO;
+
+    if ([[self customBlockedApplicationsForBundleIdentifier:sourceBundleIdentifier]
+            containsObject:targetBundleIdentifier]) return YES;
 
     // Only enforce requests with a real third-party source. This preserves icon launches,
     // SpringBoard restores, lock-screen transitions, system launches and AppData actions.

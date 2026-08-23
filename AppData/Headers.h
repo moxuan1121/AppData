@@ -45,6 +45,7 @@
 @interface LSApplicationProxy : LSBundleProxy
 + (LSApplicationProxy *)applicationProxyForIdentifier:(NSString *)identifier;
 @property (nonatomic,readonly) NSString *shortVersionString;
+@property (nonatomic,readonly) NSString *localizedName;
 @property (nonatomic, strong) NSString *itemName;
 @property (nonatomic, strong) NSNumber *itemID;
 @property (nonatomic,readonly) NSNumber * staticDiskUsage;
@@ -59,6 +60,7 @@
 
 @interface LSApplicationWorkspace : NSObject
 + (id)defaultWorkspace;
+- (NSArray<LSApplicationProxy *> *)allInstalledApplications;
 - (BOOL)uninstallApplication:(NSString *)bundleIdentifier withOptions:(NSDictionary *)options error:(NSError **)error;
 - (BOOL)uninstallApplication:(NSString *)bundleIdentifier withOptions:(NSDictionary *)options;
 @end
