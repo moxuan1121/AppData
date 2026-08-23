@@ -371,7 +371,25 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
 
     [self applyRoundedStyleToPreviewIconView];
     
-    self.appStoreButton.hidden = ![self.appData hasAppStoreApp];
+    BOOL hasAppStorePage = [self.appData hasAppStoreApp];
+    NSString *sourceIconName = @"AppStoreButton";
+    NSString *sourceDescription = @"App Store";
+    if (!hasAppStorePage) {
+        if ([self.appData isInstalledBySileo]) {
+            sourceIconName = @"SileoButton";
+            sourceDescription = @"Sileo 安装";
+        } else {
+            // Non-App-Store user applications are represented by the supplied
+            // TrollStore icon, including installations whose signer name is unavailable.
+            sourceIconName = @"TrollStoreButton";
+            sourceDescription = @"TrollStore 安装";
+        }
+    }
+    UIImage *sourceImage = [[ADHelper imageNamed:sourceIconName] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    [self.appStoreButton setImage:sourceImage forState:UIControlStateNormal];
+    self.appStoreButton.hidden = !self.appData.isApplication;
+    self.appStoreButton.userInteractionEnabled = hasAppStorePage;
+    self.appStoreButton.accessibilityLabel = sourceDescription;
     
     if ([self.appData isApplication]) {
         NSString *customIconName = self.appData.customIconName;

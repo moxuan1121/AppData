@@ -56,6 +56,8 @@
 
 - (BOOL)hasAppStoreApp;
 - (void)openInAppStore;
+- (BOOL)isInstalledByTrollStore;
+- (BOOL)isInstalledBySileo;
 #pragma mark - Permissions
 
 - (NSArray <NSDictionary *> *)getPermissions;

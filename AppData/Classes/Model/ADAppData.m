@@ -190,6 +190,24 @@
     [[UIApplication sharedApplication] openURL:[NSURL URLWithString:appStoreLink] options:@{} completionHandler:nil];
 }
 
+- (BOOL)isInstalledBySileo {
+    if ([self hasAppStoreApp]) return NO;
+    NSString *bundlePath = self.bundleURL.path.lowercaseString;
+    return [bundlePath containsString:@"/applications/"]
+        && ![bundlePath containsString:@"/var/containers/bundle/application/"];
+}
+
+- (BOOL)isInstalledByTrollStore {
+    if ([self hasAppStoreApp] || [self isInstalledBySileo]) return NO;
+    NSString *signerIdentity = self.appProxy.signerIdentity.lowercaseString;
+    NSString *bundlePath = self.bundleURL.path.lowercaseString;
+    if ([signerIdentity containsString:@"trollstore"] || [signerIdentity containsString:@"trollstorehelper"]) return YES;
+
+    // TrollStore and other persistent IPA installations use the user-application
+    // container rather than the /Applications path used by Sileo-installed apps.
+    return [bundlePath containsString:@"/var/containers/bundle/application/"];
+}
+
 #pragma mark - Caches
 
 - (NSURL *)cacheDirectoryURL {
