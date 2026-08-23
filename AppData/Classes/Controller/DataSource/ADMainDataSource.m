@@ -9,6 +9,8 @@
 #import "ADActionsBarView.h"
 #import "ADTitleSectionHeaderView.h"
 #import <objc/runtime.h>
+#import <objc/message.h>
+#import <dlfcn.h>
 
 #ifndef IS_IPAD
 #define IS_IPAD (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad)
@@ -534,7 +536,19 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
     [self downgrade_fetchVersionProviders:providers index:0 appID:appID results:[NSMutableArray array] seenKeys:[NSMutableSet set] errors:[NSMutableArray array] completion:completion];
 }
 
-- (void)downgrade_installWithTrackID:(long long)trackId versionID:(long long)versionId {
+- (void)_fallback_downgrade_installWithTrackID:(long long)trackId versionID:(long long)versionId {
+    static dispatch_once_t storeKitLoadToken;
+    static void *storeKitUIHandle = NULL;
+    dispatch_once(&storeKitLoadToken, ^{
+        storeKitUIHandle = dlopen("/System/Library/PrivateFrameworks/StoreKitUI.framework/StoreKitUI", RTLD_LAZY | RTLD_LOCAL);
+    });
+    if (!storeKitUIHandle || !objc_getClass("SKUIItemOffer") || !objc_getClass("SKUIItem") ||
+        !objc_getClass("SKUIItemStateCenter") || !objc_getClass("SKUIClientContext")) {
+        NSLog(@"[AppData Downgrade] StoreKitUI fallback is unavailable");
+        [self showDowngradeMessage:@"当前系统不支持降级下载通道。" title:@"提交失败"];
+        return;
+    }
+
     NSString *adamId = [NSString stringWithFormat:@"%lld", trackId];
     NSString *appExtVrsId = [NSString stringWithFormat:@"%lld", versionId];
     NSString *offerString = [NSString stringWithFormat:@"productType=C&price=0&salableAdamId=%@&pricingParameters=pricingParameter&appExtVrsId=%@&clientBuyId=1&installed=0&trolled=1", adamId, appExtVrsId];
@@ -552,6 +566,79 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
     NSArray *items = @[item];
 
     [center _performPurchases:[center _newPurchasesWithItems:items] hasBundlePurchase:NO withClientContext:[objc_getClass("SKUIClientContext") defaultContext] completionBlock:^(id arg1){}];
+}
+
+- (void)downgrade_installWithTrackID:(long long)trackId versionID:(long long)versionId {
+    NSString *adamId = [NSString stringWithFormat:@"%lld", trackId];
+    NSString *appExtVrsId = [NSString stringWithFormat:@"%lld", versionId];
+    NSString *buyParameters = [NSString stringWithFormat:@"productType=C&price=0&salableAdamId=%@&pricingParameters=pricingParameter&appExtVrsId=%@&clientBuyId=1&installed=0&trolled=1", adamId, appExtVrsId];
+
+    static dispatch_once_t loadToken;
+    static void *appStoreDaemonHandle = NULL;
+    dispatch_once(&loadToken, ^{
+        appStoreDaemonHandle = dlopen("/System/Library/PrivateFrameworks/AppStoreDaemon.framework/AppStoreDaemon", RTLD_LAZY | RTLD_LOCAL);
+    });
+
+    Class purchaseClass = NSClassFromString(@"ASDPurchase");
+    Class managerClass = NSClassFromString(@"ASDPurchaseManager");
+    if (!appStoreDaemonHandle || !purchaseClass || !managerClass) {
+        NSLog(@"[AppData Downgrade] AppStoreDaemon unavailable; using StoreKitUI fallback");
+        [self _fallback_downgrade_installWithTrackID:trackId versionID:versionId];
+        return;
+    }
+
+    @try {
+        id purchase = [[purchaseClass alloc] init];
+        SEL setBuyParametersSelector = NSSelectorFromString(@"setBuyParameters:");
+        SEL setIsRedownloadSelector = NSSelectorFromString(@"setIsRedownload:");
+        if (!purchase || ![purchase respondsToSelector:setBuyParametersSelector]) {
+            @throw [NSException exceptionWithName:@"AppDataASDPurchaseUnavailable" reason:@"ASDPurchase does not accept buy parameters" userInfo:nil];
+        }
+        ((void (*)(id, SEL, id))objc_msgSend)(purchase, setBuyParametersSelector, buyParameters);
+        if ([purchase respondsToSelector:setIsRedownloadSelector]) {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(purchase, setIsRedownloadSelector, YES);
+        }
+
+        id manager = nil;
+        for (NSString *singletonName in @[@"sharedManager", @"sharedInstance", @"defaultManager"]) {
+            SEL singletonSelector = NSSelectorFromString(singletonName);
+            if ([managerClass respondsToSelector:singletonSelector]) {
+                manager = ((id (*)(id, SEL))objc_msgSend)(managerClass, singletonSelector);
+                if (manager) break;
+            }
+        }
+        if (!manager) {
+            @throw [NSException exceptionWithName:@"AppDataASDManagerUnavailable" reason:@"ASDPurchaseManager singleton is unavailable" userInfo:nil];
+        }
+
+        SEL startSelector = NSSelectorFromString(@"startPurchase:withResultHandler:");
+        if ([manager respondsToSelector:startSelector]) {
+            __weak typeof(self) weakSelf = self;
+            void (^resultHandler)(id, NSError *) = ^(id result, NSError *error) {
+                if (!error) return;
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    NSLog(@"[AppData Downgrade] AppStoreDaemon rejected request; using StoreKitUI fallback: %@", error.localizedDescription ?: @"unknown error");
+                    [weakSelf _fallback_downgrade_installWithTrackID:trackId versionID:versionId];
+                });
+            };
+            ((void (*)(id, SEL, id, id))objc_msgSend)(manager, startSelector, purchase, resultHandler);
+            NSLog(@"[AppData Downgrade] submitted through AppStoreDaemon");
+            return;
+        }
+
+        SEL performSelector = NSSelectorFromString(@"_performPurchases:hasBundlePurchase:withClientContext:completionBlock:");
+        if ([manager respondsToSelector:performSelector]) {
+            id context = [objc_getClass("SKUIClientContext") defaultContext];
+            ((void (*)(id, SEL, id, BOOL, id, id))objc_msgSend)(manager, performSelector, @[purchase], NO, context, ^(id result) {});
+            NSLog(@"[AppData Downgrade] submitted through AppStoreDaemon purchase manager");
+            return;
+        }
+
+        @throw [NSException exceptionWithName:@"AppDataASDSelectorUnavailable" reason:@"No supported AppStoreDaemon purchase selector" userInfo:nil];
+    } @catch (NSException *exception) {
+        NSLog(@"[AppData Downgrade] AppStoreDaemon invocation failed; using StoreKitUI fallback: %@", exception.reason ?: @"unknown error");
+        [self _fallback_downgrade_installWithTrackID:trackId versionID:versionId];
+    }
 }
 
 - (void)downgrade_presentVersionSelection:(NSArray *)versions trackID:(long long)trackId {

@@ -34,6 +34,12 @@ Version lookup no longer reads or compares the local App Store account and the
 app purchaser account. Download submission reuses the device's active App Store
 session; any password or biometric request remains controlled by iOS.
 
+Download submission dynamically loads `AppStoreDaemon.framework` and sends an
+`ASDPurchase` redownload request containing the selected external version ID.
+Runtime class, singleton, and selector checks protect SpringBoard across iOS
+versions. If the daemon API is unavailable or rejects the request, AppData falls
+back to the existing dynamically loaded `StoreKitUI.framework` purchase path.
+
 ## Package removal safety
 
 The package identifier is `com.moxuan.appdata` and it replaces the former
