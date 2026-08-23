@@ -15,6 +15,11 @@
 
 #define kCustomAppNames                                     @"CustomAppNames"
 
+#define kBlockedFromLaunchingSafariPrefix                   @"IsBlockedFromLaunchingSafari"
+#define kBlockedFromLaunchingAppStorePrefix                 @"IsBlockedFromLaunchingAppStore"
+#define kBlockedFromLaunchingOthersPrefix                   @"IsBlockedFromLaunchingOthers"
+#define kBlockedFromBeingLaunchedPrefix                     @"IsBlockedFromBeingLaunched"
+
 // Notification
 #define kAppDataSwipeUpPreferencesChangedNotification       @"com.fouadraheb.appdata.swipeup-preferences-changed"
 #define kAppDataAppearancePreferencesChangedNotification    @"com.fouadraheb.appdata.appearance-preferences-changed"
@@ -38,6 +43,13 @@
 #pragma mark - App Names
 + (NSString *)customAppNameForBundleIdentifier:(NSString *)identifier;
 + (void)setCustomAppName:(NSString *)name forBundleIdentifier:(NSString *)bundleIdentifier;
+
+#pragma mark - App Launch Control
++ (BOOL)isBlockedFromLaunchingOtherApplications:(NSString *)bundleIdentifier;
++ (void)setBlockedFromLaunchingOtherApplications:(BOOL)blocked bundleIdentifier:(NSString *)bundleIdentifier;
++ (BOOL)isBlockedFromBeingLaunched:(NSString *)bundleIdentifier;
++ (void)setBlockedFromBeingLaunched:(BOOL)blocked bundleIdentifier:(NSString *)bundleIdentifier;
++ (BOOL)shouldBlockSourceBundleIdentifier:(NSString *)sourceBundleIdentifier targetBundleIdentifier:(NSString *)targetBundleIdentifier;
 
 #pragma mark - Appearance
 + (ADAppearanceStyle)appearanceStyle;

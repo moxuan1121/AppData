@@ -55,6 +55,51 @@
     return self;
 }
 
+#pragma mark - Launch Control
+
+- (NSString *)launchControlSummary {
+    NSString *bundleIdentifier = self.appData.bundleIdentifier;
+    BOOL blocksOutgoing = [ADSettings isBlockedFromLaunchingOtherApplications:bundleIdentifier];
+    BOOL blocksIncoming = [ADSettings isBlockedFromBeingLaunched:bundleIdentifier];
+    if (blocksOutgoing && blocksIncoming) return @"双向禁止";
+    if (blocksOutgoing) return @"禁止跳出";
+    if (blocksIncoming) return @"禁止唤起";
+    return @"未启用";
+}
+
+- (void)showLaunchControlMenuWithActionsBar:(ADActionsBarView *)actionsBar itemIndex:(NSInteger)itemIndex {
+    NSString *bundleIdentifier = self.appData.bundleIdentifier;
+    if (bundleIdentifier.length == 0) return;
+
+    BOOL blocksOutgoing = [ADSettings isBlockedFromLaunchingOtherApplications:bundleIdentifier];
+    BOOL blocksIncoming = [ADSettings isBlockedFromBeingLaunched:bundleIdentifier];
+    UIAlertController *menu = [UIAlertController alertControllerWithTitle:@"Redirect 启动控制"
+                                                                  message:@"按 App 单独控制跨应用启动。系统启动、桌面图标、AppData 面板、自身唤起及无法识别真实第三方来源的请求始终放行。"
+                                                           preferredStyle:UIAlertControllerStyleActionSheet];
+
+    NSString *outgoingTitle = [NSString stringWithFormat:@"%@ 禁止启动其他应用程序", blocksOutgoing ? @"✓" : @"○"];
+    [menu addAction:[UIAlertAction actionWithTitle:outgoingTitle style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [ADSettings setBlockedFromLaunchingOtherApplications:!blocksOutgoing bundleIdentifier:bundleIdentifier];
+        [actionsBar setDetail:[self launchControlSummary] forItemAtIndex:itemIndex];
+        [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
+    }]];
+
+    NSString *incomingTitle = [NSString stringWithFormat:@"%@ 禁止被其他应用程序启动", blocksIncoming ? @"✓" : @"○"];
+    [menu addAction:[UIAlertAction actionWithTitle:incomingTitle style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [ADSettings setBlockedFromBeingLaunched:!blocksIncoming bundleIdentifier:bundleIdentifier];
+        [actionsBar setDetail:[self launchControlSummary] forItemAtIndex:itemIndex];
+        [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
+    }]];
+    [menu addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+
+    if (IS_IPAD && menu.popoverPresentationController) {
+        menu.popoverPresentationController.sourceView = self.dataViewController.view;
+        menu.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.dataViewController.view.bounds), CGRectGetMidY(self.dataViewController.view.bounds), 1, 1);
+        menu.popoverPresentationController.permittedArrowDirections = 0;
+    }
+    [self.dataViewController presentViewController:menu animated:YES completion:nil];
+}
+
 #pragma mark - Downgrade Core Logic
 
 - (void)showDowngradeMessage:(NSString *)message title:(NSString *)title {
@@ -332,7 +377,8 @@
                 [actionsBar.bottomAnchor constraintEqualToAnchor:cell.contentView.bottomAnchor].active = YES;
                 __weak ADActionsBarView *weakActionsBar = actionsBar;
 
-                // 1. Update Badge
+                // 修改角标暂时从 UI 隐藏；保留实现，待新版 UI 完成后再统一清理。
+#if 0
                 [actionsBar addItemWithTitle:@"修改角标"
                                       detail:[NSString stringWithFormat:@"%td",[self.appData appBadgeCount]]
                                        image:[ADHelper imageNamed:@"ClearBadge"]
@@ -380,13 +426,14 @@
                         }];
                     }
                 }];
+#endif
 
-                // 2. Clear Caches
+                // 1. Clear Caches
                 [actionsBar addItemWithTitle:@"清理缓存"
                                       detail:@"计算中..."
                                        image:[ADHelper imageNamed:@"ClearCache"]
                                      handler:^{
-                    NSInteger itemIndex = 1;
+                    NSInteger itemIndex = 0;
                     [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
                     [weakActionsBar setDetail:@"清理中..." forItemAtIndex:itemIndex];
                     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
@@ -403,14 +450,14 @@
                     });
                 }];
 
-                // 3. Clear App Data
+                // 2. Clear App Data
                 [actionsBar addItemWithTitle:@"清理数据"
                                       detail:@"计算中..."
                                        image:[ADHelper imageNamed:@"ClearData"]
                                      handler:^{
                     if (self.appData.isApplication) {
                         [self showDestructiveConfirmationAlertWithTitle:@"清理应用数据" message:@"清理应用数据将只会删除应用沙盒中的“Library”和“Documents”文件夹，不会删除App Groups分组数据。" confirmTitle:@"清理" confirmHandler:^{
-                            NSInteger itemIndex = 2;
+                            NSInteger itemIndex = 1;
                             [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
                             [weakActionsBar setDetail:@"清理中..." forItemAtIndex:itemIndex];
                             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
@@ -429,7 +476,7 @@
                     }
                 }];
 
-                // 4. Reset Permissions
+                // 3. Reset Permissions
                 [actionsBar addItemWithTitle:@"重置权限"
                                       detail:[NSString stringWithFormat:@"%td",[self.appData getPermissions].count]
                                        image:[ADHelper imageNamed:@"ResetPermissions"]
@@ -437,7 +484,7 @@
                     if (self.appData.isApplication) {
                         [self showDestructiveConfirmationAlertWithTitle:@"重置应用权限" message:@"这将清除该应用访问通讯录、照片、相机等的所有权限。\n下次打开该应用时会重新请求这些权限。"
                                                            confirmTitle:@"重置" confirmHandler:^{
-                            NSInteger itemIndex = 3;
+                            NSInteger itemIndex = 2;
                             [self.appData resetAllAppPermissions];
                             [weakActionsBar setDetail:@"已重置!" forItemAtIndex:itemIndex];
                             [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
@@ -448,7 +495,7 @@
                     }
                 }];
 
-                // 5. Downgrade App
+                // 4. Downgrade App
                 UIImage *downgradeImage = nil;
                 if (@available(iOS 13.0, *)) {
                     downgradeImage = [UIImage systemImageNamed:@"arrow.down.circle"];
@@ -462,7 +509,7 @@
                                        image:downgradeImage
                                      handler:^{
                     if (self.appData.isApplication && [self.appData hasAppStoreApp]) {
-                        NSInteger itemIndex = 4;
+                        NSInteger itemIndex = 3;
                         UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:@"应用降级"
                                                                                              message:@"请选择降级方式"
                                                                                       preferredStyle:UIAlertControllerStyleAlert];
@@ -605,7 +652,7 @@
                     }
                 }];
 
-                // 6. Uninstall App
+                // 5. Uninstall App
                 [actionsBar addItemWithTitle:@"卸载应用"
                                       detail:@"彻底卸载"
                                        image:[ADHelper imageNamed:@"OffloadApp"]
@@ -613,7 +660,7 @@
                     if (self.appData.isDeletable) {
                         [self showDestructiveConfirmationAlertWithTitle:@"卸载应用" message:@"这将彻底卸载该应用并删除其所有数据。\n此操作不可撤销！"
                                                            confirmTitle:@"卸载" confirmHandler:^{
-                            NSInteger itemIndex = 5;
+                            NSInteger itemIndex = 4;
                             [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
 
                             [self.appData uninstallAppWithCompletion:^(BOOL success) {
@@ -632,33 +679,50 @@
                     }
                 }];
 
+                // 6. Redirect / per-app launch control (tap and long press use the same menu).
+                UIImage *redirectImage = nil;
+                if (@available(iOS 13.0, *)) {
+                    redirectImage = [UIImage systemImageNamed:@"arrow.left.arrow.right.circle"];
+                }
+                if (!redirectImage) redirectImage = [ADHelper imageNamed:@"ResetPermissions"];
+                NSInteger launchControlIndex = 5;
+                ADActionBarBlock launchControlHandler = ^{
+                    [self showLaunchControlMenuWithActionsBar:weakActionsBar itemIndex:launchControlIndex];
+                };
+                [actionsBar addItemWithTitle:@"Redirect"
+                                      detail:[self launchControlSummary]
+                                       image:redirectImage
+                                     handler:launchControlHandler
+                            longPressHandler:launchControlHandler];
+
                 if (!self.appData.isApplication) {
+                    [actionsBar setItemEnabled:NO atIndex:1];
                     [actionsBar setItemEnabled:NO atIndex:2];
-                    [actionsBar setItemEnabled:NO atIndex:3];
-                }
-
-                if ([self.appData hasAppStoreApp]) {
-                    [actionsBar setItemEnabled:YES atIndex:4];
-                    [actionsBar setDetail:@"版本回退" forItemAtIndex:4];
-                } else {
-                    [actionsBar setItemEnabled:NO atIndex:4];
-                    [actionsBar setDetail:@"非商店应用" forItemAtIndex:4];
-                }
-
-                if (!self.appData.isDeletable) {
                     [actionsBar setItemEnabled:NO atIndex:5];
                 }
 
-                [actionsBar showLoadingIndicatorForItemAtIndex:1];
+                if ([self.appData hasAppStoreApp]) {
+                    [actionsBar setItemEnabled:YES atIndex:3];
+                    [actionsBar setDetail:@"版本回退" forItemAtIndex:3];
+                } else {
+                    [actionsBar setItemEnabled:NO atIndex:3];
+                    [actionsBar setDetail:@"非商店应用" forItemAtIndex:3];
+                }
+
+                if (!self.appData.isDeletable) {
+                    [actionsBar setItemEnabled:NO atIndex:4];
+                }
+
+                [actionsBar showLoadingIndicatorForItemAtIndex:0];
                 [self.appData getCachesDirectorySizeWithCompletion:^(NSString *formattedSize) {
-                    [actionsBar setDetail:formattedSize forItemAtIndex:1];
-                    [actionsBar hideLoadingIndicatorForItemAtIndex:1];
+                    [actionsBar setDetail:formattedSize forItemAtIndex:0];
+                    [actionsBar hideLoadingIndicatorForItemAtIndex:0];
                 }];
 
-                [actionsBar showLoadingIndicatorForItemAtIndex:2];
+                [actionsBar showLoadingIndicatorForItemAtIndex:1];
                 [self.appData getAppUsageDirectorySizeWithCompletion:^(NSString *formattedSize) {
-                    [actionsBar setDetail:formattedSize forItemAtIndex:2];
-                    [actionsBar hideLoadingIndicatorForItemAtIndex:2];
+                    [actionsBar setDetail:formattedSize forItemAtIndex:1];
+                    [actionsBar hideLoadingIndicatorForItemAtIndex:1];
                 }];
             }
             return cell;

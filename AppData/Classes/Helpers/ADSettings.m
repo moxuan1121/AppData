@@ -130,4 +130,64 @@
     [ADSettings.sharedInstance.userDefaults setObject:mutableDictionary forKey:kCustomAppNames];
 }
 
+#pragma mark - App Launch Control
+
++ (NSString *)launchControlKeyWithPrefix:(NSString *)prefix bundleIdentifier:(NSString *)bundleIdentifier {
+    if (prefix.length == 0 || bundleIdentifier.length == 0) return nil;
+    return [NSString stringWithFormat:@"%@/%@", prefix, bundleIdentifier];
+}
+
++ (BOOL)launchControlValueForPrefix:(NSString *)prefix bundleIdentifier:(NSString *)bundleIdentifier {
+    NSString *key = [self launchControlKeyWithPrefix:prefix bundleIdentifier:bundleIdentifier];
+    return key ? [self boolForKey:key] : NO;
+}
+
++ (void)setLaunchControlValue:(BOOL)value prefix:(NSString *)prefix bundleIdentifier:(NSString *)bundleIdentifier {
+    NSString *key = [self launchControlKeyWithPrefix:prefix bundleIdentifier:bundleIdentifier];
+    if (key) [self setObject:@(value) forKey:key];
+}
+
++ (BOOL)isBlockedFromLaunchingOtherApplications:(NSString *)bundleIdentifier {
+    return [self launchControlValueForPrefix:kBlockedFromLaunchingSafariPrefix bundleIdentifier:bundleIdentifier]
+        && [self launchControlValueForPrefix:kBlockedFromLaunchingAppStorePrefix bundleIdentifier:bundleIdentifier]
+        && [self launchControlValueForPrefix:kBlockedFromLaunchingOthersPrefix bundleIdentifier:bundleIdentifier];
+}
+
++ (void)setBlockedFromLaunchingOtherApplications:(BOOL)blocked bundleIdentifier:(NSString *)bundleIdentifier {
+    [self setLaunchControlValue:blocked prefix:kBlockedFromLaunchingSafariPrefix bundleIdentifier:bundleIdentifier];
+    [self setLaunchControlValue:blocked prefix:kBlockedFromLaunchingAppStorePrefix bundleIdentifier:bundleIdentifier];
+    [self setLaunchControlValue:blocked prefix:kBlockedFromLaunchingOthersPrefix bundleIdentifier:bundleIdentifier];
+}
+
++ (BOOL)isBlockedFromBeingLaunched:(NSString *)bundleIdentifier {
+    return [self launchControlValueForPrefix:kBlockedFromBeingLaunchedPrefix bundleIdentifier:bundleIdentifier];
+}
+
++ (void)setBlockedFromBeingLaunched:(BOOL)blocked bundleIdentifier:(NSString *)bundleIdentifier {
+    [self setLaunchControlValue:blocked prefix:kBlockedFromBeingLaunchedPrefix bundleIdentifier:bundleIdentifier];
+}
+
++ (BOOL)shouldBlockSourceBundleIdentifier:(NSString *)sourceBundleIdentifier targetBundleIdentifier:(NSString *)targetBundleIdentifier {
+    if (sourceBundleIdentifier.length == 0 || targetBundleIdentifier.length == 0) return NO;
+    if ([sourceBundleIdentifier isEqualToString:targetBundleIdentifier]) return NO;
+
+    // Only enforce requests with a real third-party source. This preserves icon launches,
+    // SpringBoard restores, lock-screen transitions, system launches and AppData actions.
+    NSSet *systemLaunchSources = [NSSet setWithObjects:
+        @"com.apple.springboard", @"com.apple.backboardd", @"com.apple.frontboard.systemappservices",
+        @"com.apple.runningboardd", @"com.apple.assertiond", nil];
+    if ([systemLaunchSources containsObject:sourceBundleIdentifier]) return NO;
+
+    NSString *sourcePrefix = kBlockedFromLaunchingOthersPrefix;
+    if ([targetBundleIdentifier isEqualToString:@"com.apple.mobilesafari"]) {
+        sourcePrefix = kBlockedFromLaunchingSafariPrefix;
+    } else if ([targetBundleIdentifier isEqualToString:@"com.apple.AppStore"]
+               || [targetBundleIdentifier isEqualToString:@"com.apple.MobileStore"]) {
+        sourcePrefix = kBlockedFromLaunchingAppStorePrefix;
+    }
+
+    return [self launchControlValueForPrefix:sourcePrefix bundleIdentifier:sourceBundleIdentifier]
+        || [self isBlockedFromBeingLaunched:targetBundleIdentifier];
+}
+
 @end

@@ -14,6 +14,7 @@
 
 @interface ADActionButton : UIButton
 @property (nonatomic, strong) ADActionBarBlock actionBlock;
+@property (nonatomic, strong) ADActionBarBlock longPressActionBlock;
 @property (nonatomic, strong) UILabel *nameLabel;
 @property (nonatomic, strong) UILabel *detailLabel;
 @property (nonatomic, strong) UIImageView *actionImageView;
@@ -34,13 +35,22 @@
 }
 
 - (void)addItemWithTitle:(NSString *)title detail:(NSString *)detail image:(UIImage *)image handler:(ADActionBarBlock)handler {
+    [self addItemWithTitle:title detail:detail image:image handler:handler longPressHandler:nil];
+}
+
+- (void)addItemWithTitle:(NSString *)title detail:(NSString *)detail image:(UIImage *)image handler:(ADActionBarBlock)handler longPressHandler:(ADActionBarBlock)longPressHandler {
     ADActionButton *view = [[ADActionButton alloc] initWithFrame:CGRectZero];
     [view setActionBlock:handler];
+    [view setLongPressActionBlock:longPressHandler];
     [view addTarget:self action:@selector(buttonTouchDown:) forControlEvents:UIControlEventTouchDown];
     [view addTarget:self action:@selector(buttonTouchUpInside:) forControlEvents:UIControlEventTouchUpInside];
     [view addTarget:self action:@selector(touchUpOutside:) forControlEvents:UIControlEventTouchUpOutside];
     [view addTarget:self action:@selector(buttonDragOutside:) forControlEvents:UIControlEventTouchDragOutside];
     [view addTarget:self action:@selector(buttonDragInside:) forControlEvents:UIControlEventTouchDragInside];
+    if (longPressHandler) {
+        UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(buttonLongPressed:)];
+        [view addGestureRecognizer:longPress];
+    }
 
     view.actionImageView = [[UIImageView alloc] init];
     view.actionImageView.userInteractionEnabled = NO;
@@ -109,6 +119,16 @@
     }
     
     [self addArrangedSubview:view];
+}
+
+- (void)buttonLongPressed:(UILongPressGestureRecognizer *)recognizer {
+    if (recognizer.state != UIGestureRecognizerStateBegan) return;
+    ADActionButton *button = (ADActionButton *)recognizer.view;
+    [self setSubviewsOfButton:button highlighted:NO];
+    if (button.longPressActionBlock) {
+        [[UIImpactFeedbackGenerator new] impactOccurred];
+        button.longPressActionBlock();
+    }
 }
 
 - (void)setItemEnabled:(BOOL)enabled atIndex:(NSInteger)index {

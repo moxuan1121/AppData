@@ -15,6 +15,79 @@ struct SBIconImageInfo {
 @interface SBLeafIcon : SBIcon
 @end
 
+@interface SBMainWorkspace : NSObject
+@end
+
+static NSString *ADStringBundleIdentifier(id value) {
+    return [value isKindOfClass:[NSString class]] && [value length] > 0 ? value : nil;
+}
+
+static NSString *ADBundleIdentifierFromObject(id object) {
+    if (!object || object == [NSNull null]) return nil;
+    NSString *directValue = ADStringBundleIdentifier(object);
+    if (directValue) return directValue;
+
+    if ([object isKindOfClass:[NSDictionary class]]) {
+        NSDictionary *dictionary = object;
+        NSArray *keys = @[
+            @"sourceApplication", @"sourceApplicationBundleIdentifier", @"sourceBundleIdentifier",
+            @"UIApplicationOpenURLOptionsSourceApplicationKey", @"_UIApplicationOpenURLOptionsSourceApplicationKey",
+            @"LSOpenConfigurationSourceApplication", @"bundleIdentifier"
+        ];
+        for (NSString *key in keys) {
+            id value = dictionary[key];
+            NSString *identifier = ADStringBundleIdentifier(value);
+            if (identifier) return identifier;
+            if (value && value != object) {
+                identifier = ADBundleIdentifierFromObject(value);
+                if (identifier) return identifier;
+            }
+        }
+        return nil;
+    }
+
+    NSArray *identifierSelectors = @[
+        NSStringFromSelector(@selector(sourceApplicationBundleIdentifier)),
+        NSStringFromSelector(@selector(applicationBundleIdentifier)),
+        NSStringFromSelector(@selector(bundleIdentifier))
+    ];
+    for (NSString *selectorName in identifierSelectors) {
+        SEL selector = NSSelectorFromString(selectorName);
+        if ([object respondsToSelector:selector]) {
+            id value = [object performSelector:selector];
+            NSString *identifier = ADStringBundleIdentifier(value);
+            if (identifier) return identifier;
+        }
+    }
+
+    SEL sourceSelector = NSSelectorFromString(@"sourceApplication");
+    if ([object respondsToSelector:sourceSelector]) {
+        id sourceApplication = [object performSelector:sourceSelector];
+        if (sourceApplication != object) return ADBundleIdentifierFromObject(sourceApplication);
+    }
+    return nil;
+}
+
+static NSString *ADTargetBundleIdentifier(id application) {
+    return ADBundleIdentifierFromObject(application);
+}
+
+static NSString *ADSourceBundleIdentifier(id options, id origin) {
+    NSString *identifier = ADBundleIdentifierFromObject(origin);
+    return identifier ?: ADBundleIdentifierFromObject(options);
+}
+
+static BOOL ADShouldBlockLaunch(id application, id options, id origin) {
+    NSString *targetBundleIdentifier = ADTargetBundleIdentifier(application);
+    NSString *sourceBundleIdentifier = ADSourceBundleIdentifier(options, origin);
+    BOOL blocked = [ADSettings shouldBlockSourceBundleIdentifier:sourceBundleIdentifier
+                                          targetBundleIdentifier:targetBundleIdentifier];
+    if (blocked) {
+        NSLog(@"[AppData Redirect] Blocked %@ -> %@", sourceBundleIdentifier, targetBundleIdentifier);
+    }
+    return blocked;
+}
+
 %group SHARED_HOOKS
 
 #pragma mark - Swipe Up on Icon
@@ -303,8 +376,41 @@ struct SBIconImageInfo {
 %end // IOS12_AND_OLDER_HOOKS
 
 
+#pragma mark - Redirect / Cross-App Launch Control
+
+%group APP_LAUNCH_CONTROL_HOOKS
+
+%hook SBMainWorkspace
+
+- (void)openApplication:(id)application withOptions:(id)options completion:(void (^)(BOOL))completion {
+    if (ADShouldBlockLaunch(application, options, nil)) {
+        if (completion) completion(NO);
+        return;
+    }
+    %orig;
+}
+
+- (void)openApplication:(id)application withOptions:(id)options origin:(id)origin completion:(void (^)(BOOL))completion {
+    if (ADShouldBlockLaunch(application, options, origin)) {
+        if (completion) completion(NO);
+        return;
+    }
+    %orig;
+}
+
+- (BOOL)_openApplication:(id)application withOptions:(id)options origin:(id)origin transitionContext:(id)transitionContext {
+    if (ADShouldBlockLaunch(application, options, origin)) return NO;
+    return %orig;
+}
+
+%end
+
+%end // APP_LAUNCH_CONTROL_HOOKS
+
+
 %ctor {
     %init(SHARED_HOOKS);
+    %init(APP_LAUNCH_CONTROL_HOOKS);
     if (@available(iOS 13, *)) {
         %init(IOS13_AND_NEWER_HOOKS);
     } else {
