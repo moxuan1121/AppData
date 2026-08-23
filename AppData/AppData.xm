@@ -62,6 +62,31 @@ static NSString *ADBundleIdentifierFromPreviousLayout(SBWorkspaceTransitionReque
     return identifier;
 }
 
+static SBIconView *ADApplicationIconViewForImageView(UIView *imageView) {
+    UIView *candidate = imageView.superview;
+    Class iconViewClass = NSClassFromString(@"SBIconView");
+    Class folderIconClass = NSClassFromString(@"SBFolderIcon");
+    Class widgetIconClass = NSClassFromString(@"SBWidgetIcon");
+
+    for (NSUInteger depth = 0; candidate && depth < 12; depth++, candidate = candidate.superview) {
+        if (iconViewClass && [candidate isKindOfClass:iconViewClass]
+            && [candidate respondsToSelector:@selector(icon)]) {
+            SBIcon *icon = [(SBIconView *)candidate icon];
+            if (!icon || (folderIconClass && [icon isKindOfClass:folderIconClass])
+                || (widgetIconClass && [icon isKindOfClass:widgetIconClass])) return nil;
+
+            NSString *bundleIdentifier = nil;
+            if ([icon respondsToSelector:@selector(applicationBundleIdentifier)]) {
+                bundleIdentifier = [icon performSelector:@selector(applicationBundleIdentifier)];
+            } else if ([icon respondsToSelector:@selector(applicationBundleID)]) {
+                bundleIdentifier = [icon performSelector:@selector(applicationBundleID)];
+            }
+            return bundleIdentifier.length > 0 ? (SBIconView *)candidate : nil;
+        }
+    }
+    return nil;
+}
+
 %group SHARED_HOOKS
 
 #pragma mark - Swipe Up on Icon
@@ -74,6 +99,7 @@ static NSString *ADBundleIdentifierFromPreviousLayout(SBWorkspaceTransitionReque
     %log;
     SBIconImageView *r = %orig;
     if (![r isKindOfClass:NSClassFromString(@"SBFolderIconImageView")]
+        && ![r isKindOfClass:NSClassFromString(@"SBIconImageCrossfadeView")]
         && [r respondsToSelector:@selector(setAdSwipeGestureRecognizer:)]) {
         [[NSNotificationCenter defaultCenter] addObserver:r selector:@selector(appDataPreferencesChanged) name:kAppDataSwipeUpPreferencesChangedNotification object:nil];
         
@@ -133,7 +159,9 @@ static NSString *ADBundleIdentifierFromPreviousLayout(SBWorkspaceTransitionReque
 %new
 - (void)appDataDidSwipeUp:(UIGestureRecognizer *)gesture {
     if (gesture.state == UIGestureRecognizerStateEnded) {
-        [ADDataViewController presentControllerFromSBIconImageView:self fromContextMenu:NO];
+        SBIconView *iconView = ADApplicationIconViewForImageView(self);
+        if (!iconView) return;
+        [ADDataViewController presentControllerFromSBIconView:iconView fromContextMenu:NO];
     }
 }
 

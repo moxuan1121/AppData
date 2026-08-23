@@ -277,10 +277,10 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
             }
         }
     } else {
-        [self showAlertFromViewController:rootController
-                                    title:@"AppData"
-                                  message:[NSString stringWithFormat:@"无法获取应用数据。\n\n%@ 不是有效的图标类。", [iconView class]]
-                              cancelTitle:@"确定"];
+        // SpringBoard creates temporary crossfade/folder-animation views that are
+        // not application icons. Ignore them silently instead of showing UI.
+        NSLog(@"[AppData] Ignored unsupported icon view: %@", [iconView class]);
+        return;
     }
 }
 
