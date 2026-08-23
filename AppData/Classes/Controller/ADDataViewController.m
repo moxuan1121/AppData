@@ -235,6 +235,10 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
     [self dismissAppDataControllerAnimated:YES completion:nil];
 }
 
+- (void)dismissImmediately {
+    [self dismissAppDataControllerAnimated:NO completion:nil];
+}
+
 - (void)dismissAppDataControllerAnimated:(BOOL)animated completion:(void(^)(void))completion {
     // 恢复逻辑已经转移到下方生命周期中，这里只需负责关闭 Controller
     [self dismissViewControllerAnimated:animated completion:completion];

@@ -22,6 +22,7 @@
 - (void)switchTableViews;
 
 - (void)dismiss;
+- (void)dismissImmediately;
 
 // 修复警告：将参数补全为 void(^)(void) 与 .m 文件保持一致
 + (BOOL)dismissFloatingDockIfNeededWithCompletion:(void(^)(void))completion;

@@ -683,7 +683,8 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
         [alert addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             long long versionId = [ver[@"versionId"] longLongValue];
             [self downgrade_installWithTrackID:trackId versionID:versionId];
-            [self showDowngradeMessage:@"降级任务已提交至 App Store。" title:@"已发起降级"];
+            [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
+            [self.dataViewController dismissImmediately];
         }]];
     }
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
@@ -975,12 +976,8 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
                                             [weakActionsBar setDetail:@"触发下载..." forItemAtIndex:itemIndex];
                                             [self downgrade_installWithTrackID:trackId versionID:versionId];
                                             [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
-                                            [weakActionsBar setDetail:@"已发起!" forItemAtIndex:itemIndex];
                                             [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
-                                            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                                                [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
-                                            });
-                                            [self showDowngradeMessage:@"降级任务已提交至 App Store。" title:@"已发起降级"];
+                                            [self.dataViewController dismissImmediately];
                                         }];
                                 }];
                             }]];

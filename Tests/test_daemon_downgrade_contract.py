@@ -41,6 +41,11 @@ class DaemonDowngradeContractTests(unittest.TestCase):
         self.assertNotIn("verifyCredentials:", SOURCE)
         self.assertNotIn("accountName", SOURCE)
 
+    def test_success_closes_panel_without_started_alert(self):
+        self.assertNotIn("已发起降级", SOURCE)
+        self.assertNotIn("降级任务已提交", SOURCE)
+        self.assertGreaterEqual(SOURCE.count("dismissImmediately"), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
