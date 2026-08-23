@@ -19,11 +19,13 @@
 - (BOOL)isActive;
 - (BOOL)isLocalAccount;
 - (NSString *)accountName;
+- (void)setActive:(BOOL)active;
 @end
 
 @interface SSAccountStore : NSObject
 + (id)defaultStore;
 - (NSArray *)accounts;
+- (BOOL)saveAccount:(id)account verifyCredentials:(BOOL)verify error:(NSError **)error;
 @end
 
 @interface SKUIItemStateCenter : NSObject
@@ -42,6 +44,16 @@
 
 @interface SKUIClientContext : NSObject
 + (id)defaultContext;
+- (id)applicationController;
+@end
+
+@interface SSDevice : NSObject
++ (id)currentDevice;
+- (void)reloadStoreFrontIdentifier;
+@end
+
+@interface SKUIApplicationController : NSObject
+- (void)_resetUserInterfaceAfterStoreFrontChange;
 @end
 // ===============================================================
 
@@ -276,7 +288,7 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
     }
 
     if (!purchaserAccountEmail) {
-        [self showDowngradeMessage:@"无法读取该应用的购买者账号信息，请确认应用来源于 App Store。" title:@"验证失败"];
+        [self showDowngradeMessage:@"无法读取该应用的购买账号信息，请确认应用来源于 App Store。" title:@"验证失败"];
         if (completion) completion(NO);
         return;
     }
@@ -284,9 +296,56 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
     if ([activeAccountEmail caseInsensitiveCompare:purchaserAccountEmail] == NSOrderedSame) {
         if (completion) completion(YES);
     } else {
-        NSString *msg = [NSString stringWithFormat:@"账号不匹配。\n购买者: %@\n当前登录: %@", purchaserAccountEmail, activeAccountEmail];
-        [self showDowngradeMessage:msg title:@"验证失败"];
-        if (completion) completion(NO);
+        __block SSAccount *purchaserAccount = nil;
+        for (SSAccount *account in [store accounts]) {
+            if (![account isLocalAccount] && [[account accountName] caseInsensitiveCompare:purchaserAccountEmail] == NSOrderedSame) {
+                purchaserAccount = account;
+                break;
+            }
+        }
+
+        NSString *msg = [NSString stringWithFormat:@"账号不匹配。\n购买账号: %@\n当前登录: %@", purchaserAccountEmail, activeAccountEmail];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"验证失败" message:msg preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(__unused UIAlertAction *action) {
+            if (completion) completion(NO);
+        }]];
+        [alert addAction:[UIAlertAction actionWithTitle:@"切换到购买账号" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            if (!purchaserAccount) {
+                [self showDowngradeMessage:@"设备中未保存该购买账号，请先在 App Store 中登录或添加此账号。" title:@"无法切换"];
+                if (completion) completion(NO);
+                return;
+            }
+
+            NSError *switchError = nil;
+            [purchaserAccount setActive:YES];
+            BOOL saved = [store saveAccount:purchaserAccount verifyCredentials:NO error:&switchError];
+            if (!saved || switchError) {
+                NSLog(@"[AppData Downgrade] App Store account switch failed: %@", switchError.localizedDescription ?: @"unknown error");
+                [self showDowngradeMessage:@"无法切换 App Store 账号，请前往 App Store 手动切换后重试。" title:@"切换失败"];
+                if (completion) completion(NO);
+                return;
+            }
+
+            id device = [objc_getClass("SSDevice") currentDevice];
+            if ([device respondsToSelector:@selector(reloadStoreFrontIdentifier)]) {
+                [device reloadStoreFrontIdentifier];
+            }
+            id applicationController = [[objc_getClass("SKUIClientContext") defaultContext] applicationController];
+            if ([applicationController respondsToSelector:@selector(_resetUserInterfaceAfterStoreFrontChange)]) {
+                [applicationController _resetUserInterfaceAfterStoreFrontChange];
+            }
+            NSLog(@"[AppData Downgrade] App Store account switched successfully");
+            [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
+            if (completion) completion(YES);
+        }]];
+
+        if (IS_IPAD) {
+            self.dataViewController.dockDismissed = [ADDataViewController dismissFloatingDockIfNeededWithCompletion:^{
+                [self.dataViewController presentViewController:alert animated:YES completion:nil];
+            }];
+        } else {
+            [self.dataViewController presentViewController:alert animated:YES completion:nil];
+        }
     }
 }
 

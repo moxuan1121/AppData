@@ -12,6 +12,7 @@
 #import "ADMainDataSource.h"
 #import "ADMoreDataSource.h"
 #import <objc/runtime.h>
+#import <AudioToolbox/AudioToolbox.h>
 
 #ifndef IS_IPAD
 #define IS_IPAD (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad)
@@ -220,10 +221,13 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
         }
         
         if (!bundleID) {
-            [self showAlertFromViewController:rootController
-                                        title:@"AppData"
-                                      message:@"无法获取应用的包标识符。"
-                                  cancelTitle:@"确定"];
+            // Web clips, Shortcuts home-screen icons and other unsupported icons
+            // do not represent an installed application. Warn without visual UI.
+            if (@available(iOS 10.0, *)) {
+                [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeWarning];
+            } else {
+                AudioServicesPlaySystemSound(kSystemSoundID_Vibrate);
+            }
             return;
         }
         
