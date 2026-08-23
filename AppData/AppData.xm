@@ -3,6 +3,7 @@
 
 // 声明遵循 UIGestureRecognizerDelegate 协议
 @interface SBIconImageView (AppData) <UIGestureRecognizerDelegate>
+- (void)ad_updateSwipeGestureAvailability;
 @end
 
 // 声明 iOS 15/16 渲染相关的结构体和接口
