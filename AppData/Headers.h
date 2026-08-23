@@ -63,7 +63,6 @@
 - (NSArray<LSApplicationProxy *> *)allInstalledApplications;
 - (BOOL)uninstallApplication:(NSString *)bundleIdentifier withOptions:(NSDictionary *)options error:(NSError **)error;
 - (BOOL)uninstallApplication:(NSString *)bundleIdentifier withOptions:(NSDictionary *)options;
-- (BOOL)openApplicationWithBundleID:(NSString *)bundleIdentifier;
 @end
 
 // SpringBoard

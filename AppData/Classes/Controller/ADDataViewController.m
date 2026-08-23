@@ -17,6 +17,10 @@
 #define IS_IPAD (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad)
 #endif
 
+@interface UIImage (ADApplicationIconFallback)
++ (UIImage *)_applicationIconImageForBundleIdentifier:(NSString *)bundleIdentifier format:(NSInteger)format scale:(CGFloat)scale;
+@end
+
 @interface ADDataViewController () <UIGestureRecognizerDelegate>
 
 @property (nonatomic, strong) ADDataPresentationManager *presentationManager;
@@ -41,6 +45,29 @@
 @property (nonatomic, weak) UIScrollView *desktopScrollView;
 
 @end
+
+static NSString *ADBundleIdentifierForIcon(SBIcon *icon) {
+    if (!icon) return nil;
+    NSString *bundleIdentifier = nil;
+    if ([icon respondsToSelector:@selector(applicationBundleIdentifier)]) bundleIdentifier = [icon performSelector:@selector(applicationBundleIdentifier)];
+    if (bundleIdentifier.length == 0 && [icon respondsToSelector:@selector(applicationBundleID)]) bundleIdentifier = [icon performSelector:@selector(applicationBundleID)];
+    if (bundleIdentifier.length == 0 && [icon respondsToSelector:@selector(application)]) {
+        SBApplication *application = [icon application];
+        if ([application respondsToSelector:@selector(bundleIdentifier)]) bundleIdentifier = [application bundleIdentifier];
+    }
+    return bundleIdentifier.length > 0 ? bundleIdentifier : nil;
+}
+
+static SBIconImageView *ADFindIconImageView(UIView *view, NSUInteger depth) {
+    if (!view || depth > 5) return nil;
+    Class imageViewClass = NSClassFromString(@"SBIconImageView");
+    for (UIView *subview in view.subviews) {
+        if (imageViewClass && [subview isKindOfClass:imageViewClass]) return (SBIconImageView *)subview;
+        SBIconImageView *nested = ADFindIconImageView(subview, depth + 1);
+        if (nested) return nested;
+    }
+    return nil;
+}
 
 @implementation ADDataViewController
 
@@ -93,25 +120,16 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
     SBIconImageView *_iconImageView = nil;
     if ([iconView respondsToSelector:@selector(iconImageView)]) {
         _iconImageView = [iconView performSelector:@selector(iconImageView)];
-    } else if ([iconView respondsToSelector:@selector(_iconImageView)]) {
+    }
+    if (!_iconImageView && [iconView respondsToSelector:@selector(_iconImageView)]) {
         _iconImageView = [iconView _iconImageView];
-    } else {
-        _iconImageView = object_getIvar(iconView, class_getInstanceVariable(object_getClass(iconView), "_iconImageView"));
+    }
+    if (!_iconImageView) {
+        Ivar imageViewIvar = class_getInstanceVariable(object_getClass(iconView), "_iconImageView");
+        if (imageViewIvar) _iconImageView = object_getIvar(iconView, imageViewIvar);
     }
     
-    if (!_iconImageView) {
-        for (UIView *subview in iconView.subviews) {
-            if ([subview isKindOfClass:NSClassFromString(@"SBIconImageView")]) {
-                _iconImageView = (SBIconImageView *)subview;
-                break;
-            }
-        }
-    }
-    
-    if (!_iconImageView) {
-        [self showAlertWithTitle:@"AppData" message:@"无法获取应用数据。\n\n错误：找不到应用图标视图。"];
-        return;
-    }
+    if (!_iconImageView) _iconImageView = ADFindIconImageView(iconView, 0);
     [self presentControllerFromSBIconImageView:_iconImageView iconView:iconView fromContextMenu:contextMenu];
 }
 
@@ -141,20 +159,19 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
     NSLog(@"rootController: %@", rootController);
     
     // iOS 15+ 兼容新的 BundleID 提取逻辑
-    if ([iconView respondsToSelector:@selector(icon)] && [iconImageView respondsToSelector:@selector(contentsImage)]) {
+    if ([iconView respondsToSelector:@selector(icon)]) {
         SBIcon *icon = iconView.icon;
-        NSString *bundleID = nil;
-        if ([icon respondsToSelector:@selector(applicationBundleIdentifier)]) {
-            bundleID = [icon performSelector:@selector(applicationBundleIdentifier)];
-        } else if ([icon respondsToSelector:@selector(applicationBundleID)]) {
-            bundleID = [icon performSelector:@selector(applicationBundleID)];
-        }
+        NSString *bundleID = ADBundleIdentifierForIcon(icon);
         
         if (!bundleID) {
             return;
         }
         
-        ADAppData *appData = [ADAppData appDataForBundleIdentifier:bundleID iconImage:iconImageView.contentsImage];
+        UIImage *iconImage = [iconImageView respondsToSelector:@selector(contentsImage)] ? iconImageView.contentsImage : nil;
+        if (!iconImage && [UIImage respondsToSelector:@selector(_applicationIconImageForBundleIdentifier:format:scale:)]) {
+            iconImage = [UIImage _applicationIconImageForBundleIdentifier:bundleID format:2 scale:[UIScreen mainScreen].scale];
+        }
+        ADAppData *appData = [ADAppData appDataForBundleIdentifier:bundleID iconImage:iconImage];
         if (appData) {
             [[UISelectionFeedbackGenerator new] selectionChanged];
             ADDataViewController *dataViewController = [[ADDataViewController alloc] initWithAppData:appData];
@@ -362,16 +379,6 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
     [self.iconImageView.heightAnchor constraintEqualToConstant:58].active = YES;
     [self applyRoundedStyleToPreviewIconView];
 
-    UIButton *iconButton = [UIButton buttonWithType:UIButtonTypeCustom];
-    iconButton.translatesAutoresizingMaskIntoConstraints = NO;
-    iconButton.backgroundColor = [UIColor clearColor];
-    [iconButton addTarget:self action:@selector(didTapOpenApplicationIcon:) forControlEvents:UIControlEventTouchUpInside];
-    [containerView addSubview:iconButton];
-    [iconButton.leadingAnchor constraintEqualToAnchor:self.iconImageView.leadingAnchor].active = YES;
-    [iconButton.topAnchor constraintEqualToAnchor:self.iconImageView.topAnchor].active = YES;
-    [iconButton.widthAnchor constraintEqualToAnchor:self.iconImageView.widthAnchor].active = YES;
-    [iconButton.heightAnchor constraintEqualToAnchor:self.iconImageView.heightAnchor].active = YES;
-    
     self.nameLabel = [UIButton buttonWithType:UIButtonTypeSystem];
     self.nameLabel.userInteractionEnabled = NO;
     self.nameLabel.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
@@ -596,27 +603,6 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
     UIAlertController *alertController = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
     [alertController addAction:[UIAlertAction actionWithTitle:cancelTitle style:UIAlertActionStyleCancel handler:nil]];
     [viewController ?: [UIApplication sharedApplication].keyWindow.rootViewController presentViewController:alertController animated:YES completion:nil];
-}
-
-- (void)didTapOpenApplicationIcon:(id)sender {
-    NSString *bundleIdentifier = self.appData.bundleIdentifier;
-    if (![self.appData isApplication] || bundleIdentifier.length == 0) return;
-
-    if ([sender isKindOfClass:[UIControl class]]) {
-        ((UIControl *)sender).enabled = NO;
-    }
-    [[UISelectionFeedbackGenerator new] selectionChanged];
-
-    // Do not wait for the custom dismissal transition before asking SpringBoard
-    // to launch the app. Removing the panel without animation and opening on the
-    // next main-loop pass avoids the multi-second transition delay.
-    [self dismissAppDataControllerAnimated:NO completion:nil];
-    dispatch_async(dispatch_get_main_queue(), ^{
-        LSApplicationWorkspace *workspace = [NSClassFromString(@"LSApplicationWorkspace") defaultWorkspace];
-        if ([workspace respondsToSelector:@selector(openApplicationWithBundleID:)]) {
-            [workspace openApplicationWithBundleID:bundleIdentifier];
-        }
-    });
 }
 
 @end

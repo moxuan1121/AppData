@@ -52,6 +52,18 @@ static NSString *ADBundleIdentifierFromPreviousLayout(SBWorkspaceTransitionReque
     return identifier;
 }
 
+static NSString *ADBundleIdentifierForSpringBoardIcon(SBIcon *icon) {
+    if (!icon) return nil;
+    NSString *bundleIdentifier = nil;
+    if ([icon respondsToSelector:@selector(applicationBundleIdentifier)]) bundleIdentifier = [icon performSelector:@selector(applicationBundleIdentifier)];
+    if (bundleIdentifier.length == 0 && [icon respondsToSelector:@selector(applicationBundleID)]) bundleIdentifier = [icon performSelector:@selector(applicationBundleID)];
+    if (bundleIdentifier.length == 0 && [icon respondsToSelector:@selector(application)]) {
+        SBApplication *application = [icon application];
+        if ([application respondsToSelector:@selector(bundleIdentifier)]) bundleIdentifier = [application bundleIdentifier];
+    }
+    return bundleIdentifier.length > 0 ? bundleIdentifier : nil;
+}
+
 static SBIconView *ADApplicationIconViewForImageView(UIView *imageView) {
     UIView *candidate = imageView.superview;
     Class iconViewClass = NSClassFromString(@"SBIconView");
@@ -65,12 +77,7 @@ static SBIconView *ADApplicationIconViewForImageView(UIView *imageView) {
             if (!icon || (folderIconClass && [icon isKindOfClass:folderIconClass])
                 || (widgetIconClass && [icon isKindOfClass:widgetIconClass])) return nil;
 
-            NSString *bundleIdentifier = nil;
-            if ([icon respondsToSelector:@selector(applicationBundleIdentifier)]) {
-                bundleIdentifier = [icon performSelector:@selector(applicationBundleIdentifier)];
-            } else if ([icon respondsToSelector:@selector(applicationBundleID)]) {
-                bundleIdentifier = [icon performSelector:@selector(applicationBundleID)];
-            }
+            NSString *bundleIdentifier = ADBundleIdentifierForSpringBoardIcon(icon);
             return bundleIdentifier.length > 0 ? (SBIconView *)candidate : nil;
         }
     }
@@ -110,6 +117,15 @@ static SBIconView *ADApplicationIconViewForImageView(UIView *imageView) {
 
 %new
 - (void)ad_updateSwipeGestureAvailability {
+    if (!self.adSwipeGestureRecognizer
+        && ![self isKindOfClass:NSClassFromString(@"SBFolderIconImageView")]
+        && ![self isKindOfClass:NSClassFromString(@"SBIconImageCrossfadeView")]) {
+        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(appDataPreferencesChanged) name:kAppDataSwipeUpPreferencesChangedNotification object:nil];
+        self.adSwipeGestureRecognizer = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(appDataDidSwipeUp:)];
+        self.adSwipeGestureRecognizer.direction = UISwipeGestureRecognizerDirectionUp;
+        self.adSwipeGestureRecognizer.delegate = (id<UIGestureRecognizerDelegate>)self;
+        self.userInteractionEnabled = YES;
+    }
     if (!self.adSwipeGestureRecognizer) return;
     BOOL isApplicationIcon = self.window && ADApplicationIconViewForImageView(self) != nil;
     BOOL shouldInstall = [ADSettings swipeUpEnabled] && isApplicationIcon;
@@ -207,12 +223,7 @@ static SBIconView *ADApplicationIconViewForImageView(UIView *imageView) {
         SBIcon *icon = self.icon;
         if (!icon || [icon isKindOfClass:%c(SBFolderIcon)]
             || [icon isKindOfClass:%c(SBWidgetIcon)]) return NO;
-        NSString *bundleIdentifier = nil;
-        if ([icon respondsToSelector:@selector(applicationBundleIdentifier)]) {
-            bundleIdentifier = [icon performSelector:@selector(applicationBundleIdentifier)];
-        } else if ([icon respondsToSelector:@selector(applicationBundleID)]) {
-            bundleIdentifier = [icon performSelector:@selector(applicationBundleID)];
-        }
+        NSString *bundleIdentifier = ADBundleIdentifierForSpringBoardIcon(icon);
         return bundleIdentifier.length > 0;
     }
     return NO;

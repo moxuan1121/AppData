@@ -195,7 +195,6 @@
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     return @"- 点击包名(Bundle ID)即可复制\n"
-           @"- 点击面板中的应用图标即可打开当前应用\n"
            @"- 打开文件夹目录需要安装 Filza 插件或应用\n"
            @"- 清理缓存将删除应用沙盒下的 Caches 和 Tmp 文件夹\n"
            @"- 清理应用数据将删除 Library、Documents 和 Tmp 文件夹，并重置应用权限";

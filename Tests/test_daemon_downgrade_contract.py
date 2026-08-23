@@ -35,11 +35,14 @@ class DaemonDowngradeContractTests(unittest.TestCase):
         self.assertIn("respondsToSelector:startSelector", SOURCE)
         self.assertIn("@catch (NSException *exception)", SOURCE)
 
-    def test_missing_active_store_account_is_reported_without_password_handling(self):
+    def test_account_switch_persists_without_storing_password(self):
         self.assertIn("downgrade_requireActiveStoreAccount", SOURCE)
         self.assertIn("当前未登录 App Store 账号", SOURCE)
-        self.assertNotIn("verifyCredentials:", SOURCE)
-        self.assertNotIn("accountName", SOURCE)
+        self.assertIn("verifyCredentials:NO", SOURCE)
+        self.assertIn("com.storeswitcher.active.txt", SOURCE)
+        self.assertIn("com.storeswitcher.accounts_changed", SOURCE)
+        self.assertNotIn("setPassword", SOURCE)
+        self.assertNotIn("passwordTextField", SOURCE)
 
     def test_success_closes_panel_without_started_alert(self):
         self.assertNotIn("已发起降级", SOURCE)
