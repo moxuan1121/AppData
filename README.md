@@ -18,6 +18,19 @@ Compatible with iOS 11, 12, 13 and 14
     <li>Open the AppStore page of the app</li>
 </ul>
 
+## Historical App Store versions
+
+The downgrade UI resolves an App Store track ID with Apple's iTunes Lookup API,
+then queries Timbrd, Agzy, and Bilin in that order. Valid records from all
+available providers are normalized and merged, using `versionId + version` as
+the deduplication key. Network, HTTP, malformed JSON, empty, and invalid-record
+responses are logged without authentication data and do not prevent the next
+provider from being tried.
+
+Only public version metadata is queried from these providers. Existing on-device
+StoreServices code submits the selected external version ID; this project does
+not send Apple credentials, cookies, DSIDs, or tokens to a history provider.
+
 ## Screenshot
 
 <img src="https://raw.githubusercontent.com/FouadRaheb/AppData/master/Screenshots/1.jpg" width="350"> <img src="https://raw.githubusercontent.com/FouadRaheb/AppData/master/Screenshots/2.jpg" width="350">

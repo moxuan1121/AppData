@@ -372,21 +372,172 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
     [self downgrade_fetchTrackIDWithCountryCodes:countryCodes index:0 completion:completion];
 }
 
-- (void)downgrade_fetchVersionsForTrackID:(long long)trackId completion:(void(^)(NSArray *versions, NSError *err))completion {
-    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"https://apis.bilin.eu.org/history/%lld", trackId]];
-    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:[NSURLRequest requestWithURL:url] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+- (NSString *)downgrade_safeStringFromValue:(id)value maximumLength:(NSUInteger)maximumLength {
+    NSString *string = nil;
+    if ([value isKindOfClass:[NSString class]]) {
+        string = value;
+    } else if ([value isKindOfClass:[NSNumber class]]) {
+        string = [(NSNumber *)value stringValue];
+    }
+    string = [string stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (string.length == 0 || string.length > maximumLength) return nil;
+    return string;
+}
+
+- (NSArray<NSDictionary *> *)downgrade_candidateRecordsFromJSON:(id)json depth:(NSUInteger)depth {
+    if (depth > 4 || !json) return @[];
+    if ([json isKindOfClass:[NSArray class]]) {
+        NSMutableArray *records = [NSMutableArray array];
+        for (id value in (NSArray *)json) {
+            if ([value isKindOfClass:[NSDictionary class]]) [records addObject:value];
+        }
+        return records;
+    }
+    if (![json isKindOfClass:[NSDictionary class]]) return @[];
+
+    NSDictionary *dictionary = (NSDictionary *)json;
+    NSArray *containerKeys = @[@"data", @"versions", @"result", @"results", @"list", @"items"];
+    for (NSString *key in containerKeys) {
+        id child = dictionary[key];
+        NSArray *records = [self downgrade_candidateRecordsFromJSON:child depth:depth + 1];
+        if (records.count > 0) return records;
+    }
+    return @[];
+}
+
+- (NSDictionary *)downgrade_normalizedVersionRecord:(NSDictionary *)record
+                                               appID:(NSString *)appID
+                                              source:(NSString *)source {
+    if (![record isKindOfClass:[NSDictionary class]]) return nil;
+    NSArray *versionIDKeys = @[@"external_identifier", @"versionId", @"version_id", @"id"];
+    NSArray *versionKeys = @[@"bundle_version", @"version", @"bundleShortVersionString"];
+    NSArray *dateKeys = @[@"created_at", @"createTime", @"updateTime", @"date", @"time", @"release_date"];
+    NSArray *sizeKeys = @[@"size", @"fileSize", @"fileSizeBytes"];
+
+    NSString *(^firstString)(NSArray *) = ^NSString *(NSArray *keys) {
+        for (NSString *key in keys) {
+            NSString *value = [self downgrade_safeStringFromValue:record[key] maximumLength:128];
+            if (value) return value;
+        }
+        return nil;
+    };
+    NSString *versionID = firstString(versionIDKeys);
+    NSString *version = firstString(versionKeys);
+    if (!versionID || !version) return nil;
+
+    NSCharacterSet *nonDigits = [[NSCharacterSet decimalDigitCharacterSet] invertedSet];
+    if (versionID.length > 32 || [versionID rangeOfCharacterFromSet:nonDigits].location != NSNotFound || versionID.longLongValue <= 0) return nil;
+    NSCharacterSet *allowedVersionCharacters = [NSCharacterSet characterSetWithCharactersInString:@"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-+() "];
+    if (version.length > 64 || [version rangeOfCharacterFromSet:[allowedVersionCharacters invertedSet]].location != NSNotFound) return nil;
+
+    NSString *date = firstString(dateKeys) ?: @"";
+    NSString *size = firstString(sizeKeys) ?: @"";
+    return @{ @"appId": appID, @"version": version, @"versionId": versionID,
+              @"date": date, @"size": size, @"source": source };
+}
+
+- (NSArray<NSDictionary *> *)downgrade_normalizedVersionsFromJSON:(id)json appID:(NSString *)appID source:(NSString *)source {
+    NSMutableArray *versions = [NSMutableArray array];
+    for (NSDictionary *record in [self downgrade_candidateRecordsFromJSON:json depth:0]) {
+        NSDictionary *normalized = [self downgrade_normalizedVersionRecord:record appID:appID source:source];
+        if (normalized) [versions addObject:normalized];
+    }
+    return versions;
+}
+
+- (void)downgrade_fetchVersionProviders:(NSArray<NSDictionary *> *)providers
+                                  index:(NSUInteger)index
+                                  appID:(NSString *)appID
+                                results:(NSMutableArray<NSDictionary *> *)results
+                               seenKeys:(NSMutableSet<NSString *> *)seenKeys
+                                 errors:(NSMutableArray<NSString *> *)errors
+                             completion:(void(^)(NSArray *versions, NSError *err))completion {
+    if (index >= providers.count) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (error) { if(completion) completion(nil, error); return; }
-            NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-            NSArray *versions = json[@"data"];
-            if ([versions isKindOfClass:[NSArray class]] && versions.count > 0) {
-                if (completion) completion(versions, nil);
+            if (results.count > 0) {
+                if (completion) completion([results copy], nil);
             } else {
-                if (completion) completion(nil, [NSError errorWithDomain:@"Downgrade" code:404 userInfo:@{NSLocalizedDescriptionKey: @"未找到历史版本记录"}]);
+                NSString *details = errors.count > 0 ? [errors componentsJoinedByString:@"；"] : @"所有数据源均未返回有效版本";
+                NSError *error = [NSError errorWithDomain:@"Downgrade.VersionHistory" code:404 userInfo:@{NSLocalizedDescriptionKey: [@"未找到历史版本记录：" stringByAppendingString:details]}];
+                if (completion) completion(nil, error);
             }
         });
+        return;
+    }
+
+    NSDictionary *provider = providers[index];
+    NSString *name = provider[@"name"];
+    NSString *urlString = [NSString stringWithFormat:provider[@"url"], appID];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlString]
+                                                           cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
+                                                       timeoutInterval:12.0];
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+    configuration.timeoutIntervalForRequest = 12.0;
+    configuration.timeoutIntervalForResource = 18.0;
+    NSURLSession *session = [NSURLSession sessionWithConfiguration:configuration];
+    NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *networkError) {
+        NSString *failure = nil;
+        NSArray *normalized = @[];
+        NSInteger statusCode = [response isKindOfClass:[NSHTTPURLResponse class]] ? [(NSHTTPURLResponse *)response statusCode] : 0;
+        if (networkError) {
+            failure = @"网络错误";
+        } else if (statusCode < 200 || statusCode >= 300) {
+            failure = [NSString stringWithFormat:@"HTTP %ld", (long)statusCode];
+        } else if (data.length == 0 || data.length > 5 * 1024 * 1024) {
+            failure = @"响应为空或过大";
+        } else {
+            NSError *jsonError = nil;
+            id json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+            if (jsonError || (! [json isKindOfClass:[NSDictionary class]] && ![json isKindOfClass:[NSArray class]])) {
+                failure = @"JSON 格式异常";
+            } else {
+                normalized = [self downgrade_normalizedVersionsFromJSON:json appID:appID source:name];
+                if (normalized.count == 0) failure = @"没有有效版本";
+            }
+        }
+
+        if (failure) {
+            [errors addObject:[NSString stringWithFormat:@"%@：%@", name, failure]];
+            NSLog(@"[AppData Downgrade] provider=%@ failed: %@", name, failure);
+        } else {
+            NSUInteger added = 0;
+            for (NSDictionary *version in normalized) {
+                NSString *key = [NSString stringWithFormat:@"%@|%@", version[@"versionId"], version[@"version"]];
+                if (![seenKeys containsObject:key]) {
+                    [seenKeys addObject:key];
+                    [results addObject:version];
+                    added++;
+                } else {
+                    // Keep provider priority, but let later providers fill metadata gaps.
+                    NSUInteger existingIndex = [results indexOfObjectPassingTest:^BOOL(NSDictionary *existing, NSUInteger idx, BOOL *stop) {
+                        NSString *existingKey = [NSString stringWithFormat:@"%@|%@", existing[@"versionId"], existing[@"version"]];
+                        return [existingKey isEqualToString:key];
+                    }];
+                    if (existingIndex != NSNotFound) {
+                        NSMutableDictionary *filled = [results[existingIndex] mutableCopy];
+                        if ([filled[@"date"] length] == 0 && [version[@"date"] length] > 0) filled[@"date"] = version[@"date"];
+                        if ([filled[@"size"] length] == 0 && [version[@"size"] length] > 0) filled[@"size"] = version[@"size"];
+                        results[existingIndex] = [filled copy];
+                    }
+                }
+            }
+            NSLog(@"[AppData Downgrade] provider=%@ valid=%lu added=%lu", name, (unsigned long)normalized.count, (unsigned long)added);
+        }
+        [session finishTasksAndInvalidate];
+        [self downgrade_fetchVersionProviders:providers index:index + 1 appID:appID results:results seenKeys:seenKeys errors:errors completion:completion];
     }];
     [task resume];
+}
+
+- (void)downgrade_fetchVersionsForTrackID:(long long)trackId completion:(void(^)(NSArray *versions, NSError *err))completion {
+    NSString *appID = [NSString stringWithFormat:@"%lld", trackId];
+    NSArray *providers = @[
+        @{ @"name": @"timbrd", @"url": @"https://api.timbrd.com/apple/app-version/index.php?id=%@" },
+        @{ @"name": @"agzy", @"url": @"https://app.agzy.cn/searchVersion?appid=%@" },
+        @{ @"name": @"bilin", @"url": @"https://apis.bilin.eu.org/history/%@" }
+    ];
+    [self downgrade_fetchVersionProviders:providers index:0 appID:appID results:[NSMutableArray array] seenKeys:[NSMutableSet set] errors:[NSMutableArray array] completion:completion];
 }
 
 - (void)downgrade_installWithTrackID:(long long)trackId versionID:(long long)versionId {
@@ -411,15 +562,16 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
 
 - (void)downgrade_presentVersionSelection:(NSArray *)versions trackID:(long long)trackId {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"选择版本" message:@"请选择要降级的版本" preferredStyle:UIAlertControllerStyleActionSheet];
-    NSArray *sortedVersions = [versions sortedArrayUsingDescriptors:@[[NSSortDescriptor sortDescriptorWithKey:@"release_date" ascending:NO]]];
+    NSArray *sortedVersions = [versions sortedArrayUsingDescriptors:@[[NSSortDescriptor sortDescriptorWithKey:@"date" ascending:NO]]];
 
     for (NSDictionary *ver in sortedVersions) {
-        NSString *bVer = ver[@"bundle_version"] ?: @"暂无";
-        NSString *extId = [ver[@"external_identifier"] stringValue] ?: @"";
-        NSString *title = extId.length > 0 ? [NSString stringWithFormat:@"%@ (%@)", bVer, extId] : bVer;
+        NSString *bVer = ver[@"version"] ?: @"暂无";
+        NSString *extId = ver[@"versionId"] ?: @"";
+        NSString *source = ver[@"source"] ?: @"";
+        NSString *title = [NSString stringWithFormat:@"%@ (%@) · %@", bVer, extId, source];
 
         [alert addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            long long versionId = [ver[@"external_identifier"] longLongValue];
+            long long versionId = [ver[@"versionId"] longLongValue];
             [self downgrade_installWithTrackID:trackId versionID:versionId];
             [self showDowngradeMessage:@"降级任务已提交至 App Store，等待验证账户" title:@"已发起降级"];
         }]];
@@ -689,7 +841,7 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
 
                                             BOOL found = NO;
                                             for (NSDictionary *ver in versions) {
-                                                long long extId = [ver[@"external_identifier"] longLongValue];
+                                                long long extId = [ver[@"versionId"] longLongValue];
                                                 if (extId == versionId) {
                                                     found = YES;
                                                     break;
