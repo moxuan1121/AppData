@@ -1,4 +1,4 @@
-name: Build AppData (Rootful & Rootless)
+name: Build AppData for Dopamine RootHide
 
 on:
   push:
@@ -117,52 +117,27 @@ jobs:
           ldid -S build/Release-iphoneos/AppData.dylib
           ldid -S build/Release-iphoneos/AppDataPrefs.bundle/AppDataPrefs
 
-      - name: Package Rootful DEB
+      - name: Package Dopamine RootHide DEB
         run: |
-          # 把项目内自带的真实 Package 模板文件夹拷贝到当前根目录
-          cp -r AppData/Package ./Package
-          
-          # 将编译出的 dylib 放入模板的动态库目录中
-          cp build/Release-iphoneos/AppData.dylib Package/Library/MobileSubstrate/DynamicLibraries/
-          
-          # 将编译出的设置面板内容合并进模板的 Bundle 中
-          cp -a build/Release-iphoneos/AppDataPrefs.bundle/* Package/Library/PreferenceBundles/AppDataPrefs.bundle/
-          
-          # 打包 Rootful
-          dpkg-deb -Zgzip -b Package AppData-Rootful.deb
+          # 从项目自带模板创建唯一的 RootHide 软件包目录
+          cp -r AppData/Package Package_RootHide
 
-      - name: Package Rootless DEB
-        run: |
-          # 复制 Rootful 目录作为 Rootless 基础
-          cp -r Package Package_Rootless
+          # 写入编译产物
+          cp build/Release-iphoneos/AppData.dylib Package_RootHide/Library/MobileSubstrate/DynamicLibraries/
+          cp -a build/Release-iphoneos/AppDataPrefs.bundle/* Package_RootHide/Library/PreferenceBundles/AppDataPrefs.bundle/
           
-          # 修正 Rootless 架构
-          sed -i '' 's/Architecture: iphoneos-arm/Architecture: iphoneos-arm64/g' Package_Rootless/DEBIAN/control
+          # RootHide 使用 iphoneos-arm64e 架构和 /var/jb 根路径
+          sed -i '' 's/Architecture: iphoneos-arm/Architecture: iphoneos-arm64e/g' Package_RootHide/DEBIAN/control
+          sed -i '' 's#Icon: file:///Library/#Icon: file:///var/jb/Library/#g' Package_RootHide/DEBIAN/control
           
-          # 迁移文件路径适配 Rootless / RootHide
-          mkdir -p Package_Rootless/var/jb
-          mv Package_Rootless/Library Package_Rootless/var/jb/
+          mkdir -p Package_RootHide/var/jb
+          mv Package_RootHide/Library Package_RootHide/var/jb/
           
-          # 打包 Rootless
-          dpkg-deb -Zgzip -b Package_Rootless AppData-Rootless.deb
+          dpkg-deb -Zgzip -b Package_RootHide AppData-RootHide.deb
 
-      - name: Package Roothide DEB
-        run: |
-          # 复制 Rootful 目录作为 Roothide 基础
-          cp -r Package Package_Roothide
-          
-          # 修改为 Roothide 架构
-          sed -i '' 's/Architecture: iphoneos-arm/Architecture: iphoneos-arm64e/g' Package_Roothide/DEBIAN/control
-          
-          # 迁移到 /var/jb
-          mkdir -p Package_Roothide/var/jb
-          mv Package_Roothide/Library Package_Roothide/var/jb/
-          
-          # 打包 Roothide
-          dpkg-deb -Zgzip -b Package_Roothide AppData-Roothide.deb
-
-      - name: Upload Artifacts
+      - name: Upload Dopamine RootHide DEB
         uses: actions/upload-artifact@v4
         with:
-          name: AppData-Deb-Packages
-          path: ./*.deb
+          name: AppData-Dopamine-RootHide-DEB
+          path: ./AppData-RootHide.deb
+          if-no-files-found: error
