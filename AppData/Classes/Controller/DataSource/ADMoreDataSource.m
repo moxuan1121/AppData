@@ -148,15 +148,15 @@
         header.section = section;
         header.delegate = self;
         if (section == 1) {
-            header.titleLabel.text = [NSString stringWithFormat:@"URL Schemes (%td)",self.appData.urlSchemes.count];
+            header.titleLabel.text = [NSString stringWithFormat:@"URL 协议 (%td)",self.appData.urlSchemes.count];
         } else if (section == 2) {
-            header.titleLabel.text = [NSString stringWithFormat:@"查询 Schemes (%td)",self.appData.queriesSchemes.count];
+            header.titleLabel.text = [NSString stringWithFormat:@"可查询 URL 协议 (%td)",self.appData.queriesSchemes.count];
         } else if (section == 3) {
             header.titleLabel.text = [NSString stringWithFormat:@"活动类型 (%td)",self.appData.activityTypes.count];
         } else if (section == 4) {
             header.titleLabel.text = [NSString stringWithFormat:@"后台模式 (%td)",self.appData.backgroundModes.count];
         } else if (section == 5) {
-            header.titleLabel.text = [NSString stringWithFormat:@"授权标识 (Entitlements) (%td)",self.appData.entitlementsIdentifiers.count];
+            header.titleLabel.text = [NSString stringWithFormat:@"应用权限声明 (%td)",self.appData.entitlementsIdentifiers.count];
         }
         return header;
     }

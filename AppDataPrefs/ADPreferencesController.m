@@ -102,10 +102,10 @@
         }
         if (indexPath.row == 0) {
             cell.textLabel.text = @"Fouad Raheb";
-            cell.detailTextLabel.text = @"Twitter";
+            cell.detailTextLabel.text = @"社交主页";
         } else if (indexPath.row == 1) {
             cell.textLabel.text = @"源代码";
-            cell.detailTextLabel.text = @"GitHub";
+            cell.detailTextLabel.text = @"GitHub 源代码";
         } else if (indexPath.row == 2) { // 修改点：新增二改开发显示栏
             cell.textLabel.text = @"二改开发";
             cell.detailTextLabel.text = @"iosdump";

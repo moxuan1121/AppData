@@ -73,7 +73,7 @@
 
     BOOL blocksOutgoing = [ADSettings isBlockedFromLaunchingOtherApplications:bundleIdentifier];
     BOOL blocksIncoming = [ADSettings isBlockedFromBeingLaunched:bundleIdentifier];
-    UIAlertController *menu = [UIAlertController alertControllerWithTitle:@"Redirect 启动控制"
+    UIAlertController *menu = [UIAlertController alertControllerWithTitle:@"跳转控制"
                                                                   message:@"按 App 单独控制跨应用启动。系统启动、桌面图标、AppData 面板、自身唤起及无法识别真实第三方来源的请求始终放行。"
                                                            preferredStyle:UIAlertControllerStyleActionSheet];
 
@@ -280,7 +280,7 @@
     NSArray *sortedVersions = [versions sortedArrayUsingDescriptors:@[[NSSortDescriptor sortDescriptorWithKey:@"release_date" ascending:NO]]];
 
     for (NSDictionary *ver in sortedVersions) {
-        NSString *bVer = ver[@"bundle_version"] ?: @"N/A";
+        NSString *bVer = ver[@"bundle_version"] ?: @"暂无";
         NSString *extId = [ver[@"external_identifier"] stringValue] ?: @"";
         NSString *title = extId.length > 0 ? [NSString stringWithFormat:@"%@ (%@)", bVer, extId] : bVer;
 
@@ -689,7 +689,7 @@
                 ADActionBarBlock launchControlHandler = ^{
                     [self showLaunchControlMenuWithActionsBar:weakActionsBar itemIndex:launchControlIndex];
                 };
-                [actionsBar addItemWithTitle:@"Redirect"
+                [actionsBar addItemWithTitle:@"跳转控制"
                                       detail:[self launchControlSummary]
                                        image:redirectImage
                                      handler:launchControlHandler
@@ -860,7 +860,7 @@
             }]];
 
             if ([self isAppGroupsSection:indexPath.section]) {
-                [actions addObject:[UIAction actionWithTitle:@"复制 Identifier" image:nil identifier:@"copy-action" handler:^(__kindof UIAction * _Nonnull action) {
+                [actions addObject:[UIAction actionWithTitle:@"复制标识符" image:nil identifier:@"copy-action" handler:^(__kindof UIAction * _Nonnull action) {
                     UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
                     if (cell.textLabel.text) [[UIPasteboard generalPasteboard] setString:cell.textLabel.text];
                 }]];

@@ -143,7 +143,7 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
 
 + (void)presentControllerFromSBIconView:(SBIconView *)iconView fromContextMenu:(BOOL)contextMenu {
     if (!iconView) {
-        [self showAlertWithTitle:@"AppData" message:[NSString stringWithFormat:@"Could not fetch app data.\n\nError: Empty icon view."]];
+        [self showAlertWithTitle:@"AppData" message:@"无法获取应用数据。\n\n错误：图标视图为空。"];
         return;
     }
     
@@ -167,7 +167,7 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
     }
     
     if (!_iconImageView) {
-        [self showAlertWithTitle:@"AppData" message:[NSString stringWithFormat:@"Could not fetch app data.\n\nError: could not find icon image view."]];
+        [self showAlertWithTitle:@"AppData" message:@"无法获取应用数据。\n\n错误：找不到应用图标视图。"];
         return;
     }
     [self presentControllerFromSBIconImageView:_iconImageView iconView:iconView fromContextMenu:contextMenu];
@@ -222,8 +222,8 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
         if (!bundleID) {
             [self showAlertFromViewController:rootController
                                         title:@"AppData"
-                                      message:@"Could not fetch bundle ID."
-                                  cancelTitle:@"Okay"];
+                                      message:@"无法获取应用的包标识符。"
+                                  cancelTitle:@"确定"];
             return;
         }
         
@@ -275,8 +275,8 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
     } else {
         [self showAlertFromViewController:rootController
                                     title:@"AppData"
-                                  message:[NSString stringWithFormat:@"Could not fetch app data.\n\n%@ is not a valid icon class.", [iconView class]]
-                              cancelTitle:@"Okay"];
+                                  message:[NSString stringWithFormat:@"无法获取应用数据。\n\n%@ 不是有效的图标类。", [iconView class]]
+                              cancelTitle:@"确定"];
     }
 }
 
@@ -383,10 +383,10 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
             self.versionLabel.text = self.appData.version;
         }
     } else {
-        [self.nameLabel setTitle:@"Not an Application" forState:UIControlStateNormal];
+        [self.nameLabel setTitle:@"不是应用程序" forState:UIControlStateNormal];
         [self.nameLabel setEnabled:NO];
         
-        [self.identifierLabel setTitle:@"No Bundle Identifier" forState:UIControlStateNormal];
+        [self.identifierLabel setTitle:@"无包标识符" forState:UIControlStateNormal];
         [self.identifierLabel setEnabled:NO];
         
         [self.versionLabel setText:@"—"];
@@ -595,7 +595,7 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
         NSString *currentTitle = self.identifierLabel.titleLabel.text;
         [[UIPasteboard generalPasteboard] setString:currentTitle ?: @""];
         
-        [self.identifierLabel setTitle:@"Copied to clipboard" forState:UIControlStateNormal];
+        [self.identifierLabel setTitle:@"已复制到剪贴板" forState:UIControlStateNormal];
         
         [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
         
@@ -726,7 +726,7 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
 #pragma mark - Alert Helpers
 
 + (void)showAlertWithTitle:(NSString *)title message:(NSString *)message {
-    [self showAlertFromViewController:nil title:title message:message cancelTitle:@"Okay"];
+    [self showAlertFromViewController:nil title:title message:message cancelTitle:@"确定"];
 }
 
 + (void)showAlertFromViewController:(UIViewController *)viewController title:(NSString *)title message:(NSString *)message cancelTitle:(NSString *)cancelTitle {

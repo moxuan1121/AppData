@@ -49,7 +49,7 @@
 
 - (void)loadData {
     // Version
-    self.version = @"N/A";
+    self.version = @"暂无";
     if ([self.appProxy respondsToSelector:@selector(shortVersionString)]) {
         if (self.appProxy.shortVersionString) {
             self.version = self.appProxy.shortVersionString;
@@ -62,7 +62,7 @@
     if ([self.appProxy respondsToSelector:@selector(bundleIdentifier)] && self.appProxy.bundleIdentifier) {
         self.bundleIdentifier = self.appProxy.bundleIdentifier;
     } else {
-        self.bundleIdentifier = @"N/A";
+        self.bundleIdentifier = @"暂无";
     }
     
     // Vendable
