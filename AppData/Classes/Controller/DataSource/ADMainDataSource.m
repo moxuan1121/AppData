@@ -11,6 +11,7 @@
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <dlfcn.h>
+#import <limits.h>
 
 #ifndef IS_IPAD
 #define IS_IPAD (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad)
@@ -436,6 +437,25 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
     return [value isKindOfClass:[NSString class]] && [value length] > 0 ? value : nil;
 }
 
+- (NSNumber *)downgrade_purchaserDSID {
+    NSString *bundlePath = self.appData.bundleURL.path;
+    NSString *metadataPath = [[bundlePath stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"iTunesMetadata.plist"];
+    NSDictionary *metadata = [NSDictionary dictionaryWithContentsOfFile:metadataPath];
+    NSDictionary *downloadInfo = [metadata[@"com.apple.iTunesStore.downloadInfo"] isKindOfClass:[NSDictionary class]]
+        ? metadata[@"com.apple.iTunesStore.downloadInfo"] : nil;
+    NSDictionary *accountInfo = [downloadInfo[@"accountInfo"] isKindOfClass:[NSDictionary class]]
+        ? downloadInfo[@"accountInfo"] : nil;
+    for (NSString *key in @[@"PurchaserID", @"DownloaderID", @"DSID", @"dsid"]) {
+        NSString *candidate = [self downgrade_safeStringFromValue:accountInfo[key] maximumLength:20];
+        if (candidate.length == 0) continue;
+        NSCharacterSet *nonDigits = [[NSCharacterSet decimalDigitCharacterSet] invertedSet];
+        if ([candidate rangeOfCharacterFromSet:nonDigits].location != NSNotFound) continue;
+        unsigned long long value = strtoull(candidate.UTF8String, NULL, 10);
+        if (value > 0 && value <= LLONG_MAX) return @(value);
+    }
+    return nil;
+}
+
 - (BOOL)switchStoreAccountTo:(SSAccount *)targetAccount error:(NSError **)error {
     if (!targetAccount) return NO;
     SSAccountStore *store = [objc_getClass("SSAccountStore") defaultStore];
@@ -747,6 +767,23 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
         if ([purchase respondsToSelector:setIsRedownloadSelector]) {
             ((void (*)(id, SEL, BOOL))objc_msgSend)(purchase, setIsRedownloadSelector, YES);
         }
+
+        // Pin the daemon request to this app's recorded purchaser. Storefront alone
+        // is insufficient when multiple saved Apple IDs belong to the same country.
+        NSNumber *purchaserDSID = [self downgrade_purchaserDSID];
+        NSDictionary<NSString *, NSNumber *> *purchaseIdentity = @{
+            @"setItemID:": @(trackId),
+            @"setAccountIdentifier:": purchaserDSID ?: (NSNumber *)[NSNull null],
+            @"setPurchaserDSID:": purchaserDSID ?: (NSNumber *)[NSNull null],
+            @"setOwnerDSID:": purchaserDSID ?: (NSNumber *)[NSNull null]
+        };
+        [purchaseIdentity enumerateKeysAndObjectsUsingBlock:^(NSString *selectorName, NSNumber *value, BOOL *stop) {
+            if ((id)value == [NSNull null]) return;
+            SEL selector = NSSelectorFromString(selectorName);
+            if ([purchase respondsToSelector:selector]) {
+                ((void (*)(id, SEL, id))objc_msgSend)(purchase, selector, value);
+            }
+        }];
 
         id manager = nil;
         for (NSString *singletonName in @[@"sharedManager", @"sharedInstance", @"defaultManager"]) {

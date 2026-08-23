@@ -54,6 +54,13 @@ class DaemonDowngradeContractTests(unittest.TestCase):
         self.assertIn("ADMainDataSource *strongDataSource = self", SOURCE)
         self.assertIn("[strongDataSource _fallback_downgrade_installWithTrackID", SOURCE)
 
+    def test_purchase_is_bound_to_validated_app_purchaser(self):
+        self.assertIn("downgrade_purchaserDSID", SOURCE)
+        self.assertIn('@"PurchaserID", @"DownloaderID", @"DSID", @"dsid"', SOURCE)
+        self.assertIn("decimalDigitCharacterSet", SOURCE)
+        for selector in ("setItemID:", "setAccountIdentifier:", "setPurchaserDSID:", "setOwnerDSID:"):
+            self.assertIn(selector, SOURCE)
+
     def test_success_closes_panel_without_started_alert(self):
         self.assertNotIn("已发起降级", SOURCE)
         self.assertNotIn("降级任务已提交", SOURCE)
