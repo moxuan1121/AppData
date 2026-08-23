@@ -112,23 +112,34 @@ static SBIconView *ADApplicationIconViewForImageView(UIView *imageView) {
         
         r.userInteractionEnabled = YES;
         
-        // Add gesture if enabled
-        [self appDataPreferencesChanged];
+        // The view is not in its final hierarchy during init. didMoveToWindow
+        // installs the gesture only after it resolves to a real app icon.
     }
     return r;
 }
 
 %new
-- (void)appDataPreferencesChanged {
-    if ([ADSettings swipeUpEnabled]) {
-        if (![self.gestureRecognizers containsObject:self.adSwipeGestureRecognizer]) {
-            [self addGestureRecognizer:self.adSwipeGestureRecognizer];
-        }
-    } else {
-        if ([self.gestureRecognizers containsObject:self.adSwipeGestureRecognizer]) {
-            [self removeGestureRecognizer:self.adSwipeGestureRecognizer];
-        }
+- (void)ad_updateSwipeGestureAvailability {
+    if (!self.adSwipeGestureRecognizer) return;
+    BOOL isApplicationIcon = self.window && ADApplicationIconViewForImageView(self) != nil;
+    BOOL shouldInstall = [ADSettings swipeUpEnabled] && isApplicationIcon;
+    if (shouldInstall && ![self.gestureRecognizers containsObject:self.adSwipeGestureRecognizer]) {
+        [self addGestureRecognizer:self.adSwipeGestureRecognizer];
+    } else if (!shouldInstall && [self.gestureRecognizers containsObject:self.adSwipeGestureRecognizer]) {
+        [self removeGestureRecognizer:self.adSwipeGestureRecognizer];
     }
+}
+
+- (void)didMoveToWindow {
+    %orig;
+    if ([self respondsToSelector:@selector(ad_updateSwipeGestureAvailability)]) {
+        [self ad_updateSwipeGestureAvailability];
+    }
+}
+
+%new
+- (void)appDataPreferencesChanged {
+    [self ad_updateSwipeGestureAvailability];
 
     // 刷新图标缓存与显示
     if ([self respondsToSelector:@selector(clearCachedImages)]) {
@@ -306,10 +317,18 @@ static SBIconView *ADApplicationIconViewForImageView(UIView *imageView) {
 %new
 - (BOOL)ad_isSupportedIcon {
     if ([self respondsToSelector:@selector(icon)]) {
-        return ![self.icon isKindOfClass:%c(SBFolderIcon)]
-            && ![self.icon isKindOfClass:%c(SBWidgetIcon)];
+        SBIcon *icon = self.icon;
+        if (!icon || [icon isKindOfClass:%c(SBFolderIcon)]
+            || [icon isKindOfClass:%c(SBWidgetIcon)]) return NO;
+        NSString *bundleIdentifier = nil;
+        if ([icon respondsToSelector:@selector(applicationBundleIdentifier)]) {
+            bundleIdentifier = [icon performSelector:@selector(applicationBundleIdentifier)];
+        } else if ([icon respondsToSelector:@selector(applicationBundleID)]) {
+            bundleIdentifier = [icon performSelector:@selector(applicationBundleID)];
+        }
+        return bundleIdentifier.length > 0;
     }
-    return YES;
+    return NO;
 }
 
 %end
