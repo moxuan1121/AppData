@@ -25,6 +25,9 @@ class DaemonDowngradeContractTests(unittest.TestCase):
             "ASDPurchaseManager",
             "setBuyParameters:",
             "setIsRedownload:",
+            "setItemID:",
+            "setCreatesJobs:",
+            "setShouldCancelForInstalledBundleItems:",
             "appExtVrsId=%@",
             "installed=0",
         ):
@@ -57,9 +60,16 @@ class DaemonDowngradeContractTests(unittest.TestCase):
     def test_daemon_result_object_is_checked_and_failed_auth_is_retried(self):
         self.assertIn('NSSelectorFromString(@"success")', SOURCE)
         self.assertIn('NSSelectorFromString(@"error")', SOURCE)
-        self.assertIn("if (purchaseSucceeded) return", SOURCE)
+        self.assertIn("if (purchaseSucceeded) {", SOURCE)
         self.assertIn("attempt:1", SOURCE)
         self.assertIn("reloadStoreFrontIdentifier", SOURCE)
+
+    def test_store_switch_is_automatic_and_original_store_is_restored(self):
+        self.assertNotIn('alertControllerWithTitle:@"需要切换账号"', SOURCE)
+        self.assertNotIn('actionWithTitle:@"切换并继续"', SOURCE)
+        self.assertIn("ADDowngradeOriginalStoreAccountKey", SOURCE)
+        self.assertIn("downgrade_restoreOriginalStoreAccount", SOURCE)
+        self.assertGreaterEqual(SOURCE.count("[strongDataSource downgrade_restoreOriginalStoreAccount]"), 3)
 
     def test_success_closes_panel_without_started_alert(self):
         self.assertNotIn("已发起降级", SOURCE)

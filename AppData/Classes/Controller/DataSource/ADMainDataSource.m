@@ -62,6 +62,7 @@
 @end
 
 typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIdentifiers);
+static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStoreAccountKey;
 
 @interface ADAppSelectionViewController : UITableViewController <UISearchResultsUpdating>
 @property (nonatomic, copy) NSArray<LSApplicationProxy *> *applications;
@@ -476,6 +477,17 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
     return YES;
 }
 
+- (void)downgrade_restoreOriginalStoreAccount {
+    SSAccount *originalAccount = objc_getAssociatedObject(self, ADDowngradeOriginalStoreAccountKey);
+    if (!originalAccount) return;
+    objc_setAssociatedObject(self, ADDowngradeOriginalStoreAccountKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NSError *restoreError = nil;
+    if (![self switchStoreAccountTo:originalAccount error:&restoreError]) {
+        NSLog(@"[AppData Downgrade] failed to restore original storefront (%@/%ld)",
+              restoreError.domain ?: @"unknown", (long)restoreError.code);
+    }
+}
+
 - (void)downgrade_verifyOwnershipWithCompletion:(void(^)(BOOL success))completion {
     if (![self downgrade_requireActiveStoreAccount]) {
         if (completion) completion(NO);
@@ -499,33 +511,25 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
         }
     }
 
-    NSString *message = [NSString stringWithFormat:@"当前账号与购买账号不一致。\n购买账号：%@\n当前账号：%@", purchaserName, activeName ?: @"未知"];
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"需要切换账号" message:message preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(__unused UIAlertAction *action) {
+    if (!purchaserAccount) {
+        [self showDowngradeMessage:@"设备中没有保存该购买账号，请先在 App Store 登录该账号。" title:@"无法切换"];
         if (completion) completion(NO);
-    }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"切换并继续" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        if (!purchaserAccount) {
-            [self showDowngradeMessage:@"设备中没有保存该购买账号，请先在 App Store 登录该账号。" title:@"无法切换"];
-            if (completion) completion(NO);
-            return;
-        }
-        NSError *switchError = nil;
-        if (![self switchStoreAccountTo:purchaserAccount error:&switchError]) {
-            NSLog(@"[AppData Downgrade] persistent account switch failed: %@", switchError.localizedDescription ?: @"unknown error");
-            [self showDowngradeMessage:@"账号切换失败，请在 App Store 中手动切换后重试。" title:@"切换失败"];
-            if (completion) completion(NO);
-            return;
-        }
-        // Let StoreServices publish the selected account/storefront before rebuilding
-        // the purchase request. AppStoreDaemon handles any remaining authentication.
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.75 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-            [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
-            if (completion) completion(YES);
-        });
-    }]];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-        [self.dataViewController presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+
+    objc_setAssociatedObject(self, ADDowngradeOriginalStoreAccountKey, activeAccount, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NSError *switchError = nil;
+    if (![self switchStoreAccountTo:purchaserAccount error:&switchError]) {
+        objc_setAssociatedObject(self, ADDowngradeOriginalStoreAccountKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        NSLog(@"[AppData Downgrade] automatic account switch failed (%@/%ld)",
+              switchError.domain ?: @"unknown", (long)switchError.code);
+        [self showDowngradeMessage:@"账号自动切换失败，请确认购买账号仍保存在设备中。" title:@"切换失败"];
+        if (completion) completion(NO);
+        return;
+    }
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.75 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        if (completion) completion(YES);
     });
 }
 
@@ -714,7 +718,12 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
     id center = [objc_getClass("SKUIItemStateCenter") defaultCenter];
     NSArray *items = @[item];
 
-    [center _performPurchases:[center _newPurchasesWithItems:items] hasBundlePurchase:NO withClientContext:[objc_getClass("SKUIClientContext") defaultContext] completionBlock:^(id arg1){}];
+    ADMainDataSource *strongDataSource = self;
+    [center _performPurchases:[center _newPurchasesWithItems:items] hasBundlePurchase:NO withClientContext:[objc_getClass("SKUIClientContext") defaultContext] completionBlock:^(id arg1){
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [strongDataSource downgrade_restoreOriginalStoreAccount];
+        });
+    }];
 }
 
 - (void)_downgrade_installWithTrackID:(long long)trackId versionID:(long long)versionId attempt:(NSUInteger)attempt {
@@ -747,6 +756,18 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
         if ([purchase respondsToSelector:setIsRedownloadSelector]) {
             ((void (*)(id, SEL, BOOL))objc_msgSend)(purchase, setIsRedownloadSelector, YES);
         }
+        SEL setItemIDSelector = NSSelectorFromString(@"setItemID:");
+        if ([purchase respondsToSelector:setItemIDSelector]) {
+            ((void (*)(id, SEL, id))objc_msgSend)(purchase, setItemIDSelector, @(trackId));
+        }
+        SEL setCreatesJobsSelector = NSSelectorFromString(@"setCreatesJobs:");
+        if ([purchase respondsToSelector:setCreatesJobsSelector]) {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(purchase, setCreatesJobsSelector, YES);
+        }
+        SEL cancelInstalledSelector = NSSelectorFromString(@"setShouldCancelForInstalledBundleItems:");
+        if ([purchase respondsToSelector:cancelInstalledSelector]) {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(purchase, cancelInstalledSelector, NO);
+        }
 
         id manager = nil;
         for (NSString *singletonName in @[@"sharedManager", @"sharedInstance", @"defaultManager"]) {
@@ -777,7 +798,12 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
                 if (!purchaseError && result && [result respondsToSelector:errorSelector]) {
                     purchaseError = ((id (*)(id, SEL))objc_msgSend)(result, errorSelector);
                 }
-                if (purchaseSucceeded) return;
+                if (purchaseSucceeded) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        [strongDataSource downgrade_restoreOriginalStoreAccount];
+                    });
+                    return;
+                }
                 dispatch_async(dispatch_get_main_queue(), ^{
                     NSLog(@"[AppData Downgrade] AppStoreDaemon purchase failed (%@/%ld), attempt %lu",
                           purchaseError.domain ?: @"unknown", (long)purchaseError.code, (unsigned long)(attempt + 1));
@@ -789,6 +815,7 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
                         });
                     } else {
                         [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeError];
+                        [strongDataSource downgrade_restoreOriginalStoreAccount];
                     }
                 });
             };
@@ -800,7 +827,12 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
         SEL performSelector = NSSelectorFromString(@"_performPurchases:hasBundlePurchase:withClientContext:completionBlock:");
         if ([manager respondsToSelector:performSelector]) {
             id context = [objc_getClass("SKUIClientContext") defaultContext];
-            ((void (*)(id, SEL, id, BOOL, id, id))objc_msgSend)(manager, performSelector, @[purchase], NO, context, ^(id result) {});
+            ADMainDataSource *strongDataSource = self;
+            ((void (*)(id, SEL, id, BOOL, id, id))objc_msgSend)(manager, performSelector, @[purchase], NO, context, ^(id result) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [strongDataSource downgrade_restoreOriginalStoreAccount];
+                });
+            });
             NSLog(@"[AppData Downgrade] submitted through AppStoreDaemon purchase manager");
             return;
         }
