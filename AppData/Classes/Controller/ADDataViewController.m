@@ -598,13 +598,21 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
     NSString *bundleIdentifier = self.appData.bundleIdentifier;
     if (![self.appData isApplication] || bundleIdentifier.length == 0) return;
 
+    if ([sender isKindOfClass:[UIControl class]]) {
+        ((UIControl *)sender).enabled = NO;
+    }
     [[UISelectionFeedbackGenerator new] selectionChanged];
-    [self dismissAppDataControllerAnimated:YES completion:^{
+
+    // Do not wait for the custom dismissal transition before asking SpringBoard
+    // to launch the app. Removing the panel without animation and opening on the
+    // next main-loop pass avoids the multi-second transition delay.
+    [self dismissAppDataControllerAnimated:NO completion:nil];
+    dispatch_async(dispatch_get_main_queue(), ^{
         LSApplicationWorkspace *workspace = [NSClassFromString(@"LSApplicationWorkspace") defaultWorkspace];
         if ([workspace respondsToSelector:@selector(openApplicationWithBundleID:)]) {
             [workspace openApplicationWithBundleID:bundleIdentifier];
         }
-    }];
+    });
 }
 
 @end
