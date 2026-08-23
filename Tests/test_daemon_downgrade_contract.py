@@ -35,22 +35,24 @@ class DaemonDowngradeContractTests(unittest.TestCase):
         self.assertIn("respondsToSelector:startSelector", SOURCE)
         self.assertIn("@catch (NSException *exception)", SOURCE)
 
-    def test_account_switch_verifies_then_persists_without_storing_password(self):
+    def test_account_switch_reuses_saved_credentials_without_storing_password(self):
         self.assertIn("downgrade_requireActiveStoreAccount", SOURCE)
         self.assertIn("当前未登录 App Store 账号", SOURCE)
-        verified_save = SOURCE.index("saveAccount:targetAccount verifyCredentials:YES")
-        fallback_save = SOURCE.index("saveAccount:targetAccount verifyCredentials:NO", verified_save)
-        switch_marker = SOURCE.index("com.storeswitcher.active.txt", verified_save)
+        saved_switch = SOURCE.index("saveAccount:targetAccount verifyCredentials:NO")
+        switch_marker = SOURCE.index("com.storeswitcher.active.txt", saved_switch)
         resume = SOURCE.index("if (completion) completion(YES);", switch_marker)
-        self.assertLess(verified_save, fallback_save)
-        self.assertLess(fallback_save, switch_marker)
-        self.assertLess(verified_save, switch_marker)
+        self.assertLess(saved_switch, switch_marker)
         self.assertLess(switch_marker, resume)
+        self.assertNotIn("saveAccount:targetAccount verifyCredentials:YES", SOURCE)
         self.assertIn("saveAccount:previousAccount verifyCredentials:NO", SOURCE)
         self.assertIn("com.storeswitcher.active.txt", SOURCE)
         self.assertIn("com.storeswitcher.accounts_changed", SOURCE)
         self.assertNotIn("setPassword", SOURCE)
         self.assertNotIn("passwordTextField", SOURCE)
+
+    def test_daemon_reply_survives_panel_dismissal(self):
+        self.assertIn("ADMainDataSource *strongDataSource = self", SOURCE)
+        self.assertIn("[strongDataSource _fallback_downgrade_installWithTrackID", SOURCE)
 
     def test_success_closes_panel_without_started_alert(self):
         self.assertNotIn("已发起降级", SOURCE)

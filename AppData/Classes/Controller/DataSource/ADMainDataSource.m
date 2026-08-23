@@ -445,26 +445,11 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
         [account setActive:(account == targetAccount)];
     }
 
-    // This must verify through StoreServices. With NO, the account becomes active
-    // before the system password sheet finishes and the original downgrade request
-    // is resumed too early. StoreServices retains the authenticated account session;
-    // AppData never receives or stores the password itself.
-    NSError *verificationError = nil;
-    BOOL saved = [store saveAccount:targetAccount verifyCredentials:YES error:&verificationError];
-    if (!saved || verificationError) {
-        // A secondary Media & Purchases account can be saved and usable while
-        // StoreServices refuses to verify it from SpringBoard (commonly after
-        // switching back to the iCloud account's storefront). Match StoreSwitcher:
-        // persist that already-known account without verification and let the
-        // AppStoreDaemon purchase request perform any authentication it requires.
-        NSLog(@"[AppData Downgrade] StoreServices verification unavailable; retrying saved-account switch (%@/%ld)",
-              verificationError.domain ?: @"unknown", (long)verificationError.code);
-        NSError *switchError = nil;
-        saved = [store saveAccount:targetAccount verifyCredentials:NO error:&switchError];
-        if (!saved || switchError) {
-            if (error) *error = switchError ?: verificationError;
-        }
-    }
+    // StoreSwitcher-style switching reuses the authorization token already carried
+    // by this saved account. Asking StoreServices to verify here produces asymmetric
+    // password prompts when the iCloud storefront and target storefront differ.
+    // AppData never receives or stores an Apple ID password.
+    BOOL saved = [store saveAccount:targetAccount verifyCredentials:NO error:error];
     if (!saved || (error && *error)) {
         for (SSAccount *account in accounts) {
             [account setActive:(account == previousAccount)];
@@ -777,12 +762,16 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
 
         SEL startSelector = NSSelectorFromString(@"startPurchase:withResultHandler:");
         if ([manager respondsToSelector:startSelector]) {
-            __weak typeof(self) weakSelf = self;
+            // Keep the data source alive after its panel is dismissed. Otherwise an
+            // authentication/error reply can arrive after weakSelf has become nil and
+            // the fallback request silently disappears.
+            ADMainDataSource *strongDataSource = self;
             void (^resultHandler)(id, NSError *) = ^(id result, NSError *error) {
                 if (!error) return;
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    NSLog(@"[AppData Downgrade] AppStoreDaemon rejected request; using StoreKitUI fallback: %@", error.localizedDescription ?: @"unknown error");
-                    [weakSelf _fallback_downgrade_installWithTrackID:trackId versionID:versionId];
+                    NSLog(@"[AppData Downgrade] AppStoreDaemon rejected request; using StoreKitUI fallback (%@/%ld)",
+                          error.domain ?: @"unknown", (long)error.code);
+                    [strongDataSource _fallback_downgrade_installWithTrackID:trackId versionID:versionId];
                 });
             };
             ((void (*)(id, SEL, id, id))objc_msgSend)(manager, startSelector, purchase, resultHandler);
