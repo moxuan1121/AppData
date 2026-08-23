@@ -30,6 +30,9 @@ provider from being tried.
 Only public version metadata is queried from these providers. Existing on-device
 StoreServices code submits the selected external version ID; this project does
 not send Apple credentials, cookies, DSIDs, or tokens to a history provider.
+Version lookup no longer reads or compares the local App Store account and the
+app purchaser account. Download submission reuses the device's active App Store
+session; any password or biometric request remains controlled by iOS.
 
 ## Package removal safety
 

@@ -18,20 +18,6 @@
 + (UIImage *)_applicationIconImageForBundleIdentifier:(NSString *)bundleIdentifier format:(NSInteger)format scale:(CGFloat)scale;
 @end
 
-// ================= 新增：降级功能需要的私有 API 声明 =================
-@interface SSAccount : NSObject
-- (BOOL)isActive;
-- (BOOL)isLocalAccount;
-- (NSString *)accountName;
-- (void)setActive:(BOOL)active;
-@end
-
-@interface SSAccountStore : NSObject
-+ (id)defaultStore;
-- (NSArray *)accounts;
-- (BOOL)saveAccount:(id)account verifyCredentials:(BOOL)verify error:(NSError **)error;
-@end
-
 @interface SKUIItemStateCenter : NSObject
 + (id)defaultCenter;
 - (id)_newPurchasesWithItems:(id)items;
@@ -50,16 +36,6 @@
 + (id)defaultContext;
 - (id)applicationController;
 @end
-
-@interface SSDevice : NSObject
-+ (id)currentDevice;
-- (void)reloadStoreFrontIdentifier;
-@end
-
-@interface SKUIApplicationController : NSObject
-- (void)_resetUserInterfaceAfterStoreFrontChange;
-@end
-// ===============================================================
 
 typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIdentifiers);
 
@@ -305,95 +281,6 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
         }];
     } else {
         [self.dataViewController presentViewController:alert animated:YES completion:nil];
-    }
-}
-
-- (void)downgrade_verifyOwnershipWithCompletion:(void(^)(BOOL))completion {
-    __block NSString *activeAccountEmail = nil;
-    id store = [objc_getClass("SSAccountStore") defaultStore];
-    for (id account in [store accounts]) {
-        if ([account isActive] && ![account isLocalAccount]) {
-            activeAccountEmail = [account accountName];
-            break;
-        }
-    }
-    if (!activeAccountEmail) {
-        [self showDowngradeMessage:@"未找到登录的 App Store 账号" title:@"验证失败"];
-        if (completion) completion(NO);
-        return;
-    }
-
-    NSString *bundlePath = self.appData.bundleURL.path;
-    NSString *containerPath = [bundlePath stringByDeletingLastPathComponent];
-    NSString *metadataPath = [containerPath stringByAppendingPathComponent:@"iTunesMetadata.plist"];
-    NSString *purchaserAccountEmail = nil;
-
-    if ([[NSFileManager defaultManager] fileExistsAtPath:metadataPath]) {
-        NSDictionary *metadata = [NSDictionary dictionaryWithContentsOfFile:metadataPath];
-        NSDictionary *downloadInfo = metadata[@"com.apple.iTunesStore.downloadInfo"];
-        NSDictionary *accountInfo = downloadInfo[@"accountInfo"];
-        purchaserAccountEmail = accountInfo[@"AppleID"];
-    }
-
-    if (!purchaserAccountEmail) {
-        [self showDowngradeMessage:@"无法读取该应用的购买账号信息，请确认应用来源于 App Store。" title:@"验证失败"];
-        if (completion) completion(NO);
-        return;
-    }
-
-    if ([activeAccountEmail caseInsensitiveCompare:purchaserAccountEmail] == NSOrderedSame) {
-        if (completion) completion(YES);
-    } else {
-        __block SSAccount *purchaserAccount = nil;
-        for (SSAccount *account in [store accounts]) {
-            if (![account isLocalAccount] && [[account accountName] caseInsensitiveCompare:purchaserAccountEmail] == NSOrderedSame) {
-                purchaserAccount = account;
-                break;
-            }
-        }
-
-        NSString *msg = [NSString stringWithFormat:@"账号不匹配。\n购买账号: %@\n当前登录: %@", purchaserAccountEmail, activeAccountEmail];
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"验证失败" message:msg preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(__unused UIAlertAction *action) {
-            if (completion) completion(NO);
-        }]];
-        [alert addAction:[UIAlertAction actionWithTitle:@"切换到购买账号" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-            if (!purchaserAccount) {
-                [self showDowngradeMessage:@"设备中未保存该购买账号，请先在 App Store 中登录或添加此账号。" title:@"无法切换"];
-                if (completion) completion(NO);
-                return;
-            }
-
-            NSError *switchError = nil;
-            [purchaserAccount setActive:YES];
-            BOOL saved = [store saveAccount:purchaserAccount verifyCredentials:NO error:&switchError];
-            if (!saved || switchError) {
-                NSLog(@"[AppData Downgrade] App Store account switch failed: %@", switchError.localizedDescription ?: @"unknown error");
-                [self showDowngradeMessage:@"无法切换 App Store 账号，请前往 App Store 手动切换后重试。" title:@"切换失败"];
-                if (completion) completion(NO);
-                return;
-            }
-
-            id device = [objc_getClass("SSDevice") currentDevice];
-            if ([device respondsToSelector:@selector(reloadStoreFrontIdentifier)]) {
-                [device reloadStoreFrontIdentifier];
-            }
-            id applicationController = [[objc_getClass("SKUIClientContext") defaultContext] applicationController];
-            if ([applicationController respondsToSelector:@selector(_resetUserInterfaceAfterStoreFrontChange)]) {
-                [applicationController _resetUserInterfaceAfterStoreFrontChange];
-            }
-            NSLog(@"[AppData Downgrade] App Store account switched successfully");
-            [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
-            if (completion) completion(YES);
-        }]];
-
-        if (IS_IPAD) {
-            self.dataViewController.dockDismissed = [ADDataViewController dismissFloatingDockIfNeededWithCompletion:^{
-                [self.dataViewController presentViewController:alert animated:YES completion:nil];
-            }];
-        } else {
-            [self.dataViewController presentViewController:alert animated:YES completion:nil];
-        }
     }
 }
 
@@ -680,7 +567,7 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
         [alert addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             long long versionId = [ver[@"versionId"] longLongValue];
             [self downgrade_installWithTrackID:trackId versionID:versionId];
-            [self showDowngradeMessage:@"降级任务已提交至 App Store，等待验证账户" title:@"已发起降级"];
+            [self showDowngradeMessage:@"降级任务已提交至 App Store。" title:@"已发起降级"];
         }]];
     }
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
@@ -879,17 +766,8 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
 
                         [actionSheet addAction:[UIAlertAction actionWithTitle:@"从服务器获取" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
                             [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
-                            [weakActionsBar setDetail:@"验证账号..." forItemAtIndex:itemIndex];
-
-                            [self downgrade_verifyOwnershipWithCompletion:^(BOOL success) {
-                                if (!success) {
-                                    [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
-                                    [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
-                                    return;
-                                }
-
-                                [weakActionsBar setDetail:@"查询信息..." forItemAtIndex:itemIndex];
-                                [self downgrade_fetchTrackIDWithCompletion:^(long long trackId, NSError *error) {
+                            [weakActionsBar setDetail:@"查询信息..." forItemAtIndex:itemIndex];
+                            [self downgrade_fetchTrackIDWithCompletion:^(long long trackId, NSError *error) {
                                     if (error || trackId == 0) {
                                         [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
                                         [weakActionsBar setDetail:@"获取失败" forItemAtIndex:itemIndex];
@@ -911,7 +789,6 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
                                         }
                                         [self downgrade_presentVersionSelection:versions trackID:trackId];
                                     }];
-                                }];
                             }];
                         }]];
 
@@ -934,17 +811,8 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
                                 }
 
                                 [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
-                                [weakActionsBar setDetail:@"验证账号..." forItemAtIndex:itemIndex];
-
-                                [self downgrade_verifyOwnershipWithCompletion:^(BOOL success) {
-                                    if (!success) {
-                                        [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
-                                        [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
-                                        return;
-                                    }
-
-                                    [weakActionsBar setDetail:@"查询信息..." forItemAtIndex:itemIndex];
-                                    [self downgrade_fetchTrackIDWithCompletion:^(long long trackId, NSError *error) {
+                                [weakActionsBar setDetail:@"查询信息..." forItemAtIndex:itemIndex];
+                                [self downgrade_fetchTrackIDWithCompletion:^(long long trackId, NSError *error) {
                                         if (error || trackId == 0) {
                                             [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
                                             [weakActionsBar setDetail:@"获取失败" forItemAtIndex:itemIndex];
@@ -994,9 +862,8 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
                                             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                                                 [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
                                             });
-                                            [self showDowngradeMessage:@"降级任务已提交至 App Store，等待验证账户。" title:@"已发起降级"];
+                                            [self showDowngradeMessage:@"降级任务已提交至 App Store。" title:@"已发起降级"];
                                         }];
-                                    }];
                                 }];
                             }]];
 
