@@ -20,6 +20,7 @@
 #define kBlockedFromLaunchingOthersPrefix                   @"IsBlockedFromLaunchingOthers"
 #define kBlockedFromBeingLaunchedPrefix                     @"IsBlockedFromBeingLaunched"
 #define kCustomBlockedApplicationsPrefix                    @"CustomBlockedApplications"
+#define kAutoClearCachesPrefix                              @"AutoClearCaches"
 
 // Notification
 #define kAppDataSwipeUpPreferencesChangedNotification       @"com.fouadraheb.appdata.swipeup-preferences-changed"
@@ -53,6 +54,10 @@
 + (BOOL)shouldBlockSourceBundleIdentifier:(NSString *)sourceBundleIdentifier targetBundleIdentifier:(NSString *)targetBundleIdentifier;
 + (NSArray<NSString *> *)customBlockedApplicationsForBundleIdentifier:(NSString *)bundleIdentifier;
 + (void)setCustomBlockedApplications:(NSArray<NSString *> *)applications forBundleIdentifier:(NSString *)bundleIdentifier;
+
+#pragma mark - Per-App Cache Automation
++ (BOOL)automaticallyClearsCachesForBundleIdentifier:(NSString *)bundleIdentifier;
++ (void)setAutomaticallyClearsCaches:(BOOL)enabled bundleIdentifier:(NSString *)bundleIdentifier;
 
 #pragma mark - Appearance
 + (ADAppearanceStyle)appearanceStyle;

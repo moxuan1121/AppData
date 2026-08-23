@@ -1,4 +1,5 @@
 #import "Classes/Controller/ADDataViewController.h"
+#import "Classes/Model/ADAppData.h"
 
 // 声明遵循 UIGestureRecognizerDelegate 协议
 @interface SBIconImageView (AppData) <UIGestureRecognizerDelegate>
@@ -383,8 +384,27 @@ static NSString *ADBundleIdentifierFromPreviousLayout(SBWorkspaceTransitionReque
 
     SBApplicationSceneEntity *targetEntity = request.toApplicationSceneEntities.anyObject;
     NSString *targetBundleIdentifier = targetEntity.application.bundleIdentifier;
-    if (![ADSettings shouldBlockSourceBundleIdentifier:sourceBundleIdentifier
-                                targetBundleIdentifier:targetBundleIdentifier]) return %orig;
+    BOOL shouldBlock = [ADSettings shouldBlockSourceBundleIdentifier:sourceBundleIdentifier
+                                              targetBundleIdentifier:targetBundleIdentifier];
+    if (!shouldBlock) {
+        if (forExecution && targetBundleIdentifier.length > 0
+            && [ADSettings automaticallyClearsCachesForBundleIdentifier:targetBundleIdentifier]) {
+            static NSMutableSet<NSString *> *clearingBundleIdentifiers = nil;
+            static dispatch_once_t clearCacheToken;
+            dispatch_once(&clearCacheToken, ^{
+                clearingBundleIdentifiers = [NSMutableSet set];
+            });
+            if (![clearingBundleIdentifiers containsObject:targetBundleIdentifier]) {
+                [clearingBundleIdentifiers addObject:targetBundleIdentifier];
+                ADAppData *targetAppData = [ADAppData appDataForBundleIdentifier:targetBundleIdentifier iconImage:nil];
+                [targetAppData clearAppCachesWithCompletion:^{
+                    [clearingBundleIdentifiers removeObject:targetBundleIdentifier];
+                    NSLog(@"[AppData Cache] Automatically cleared caches for %@", targetBundleIdentifier);
+                }];
+            }
+        }
+        return %orig;
+    }
 
     NSLog(@"[AppData Redirect] Declined transition %@ -> %@ (%@)",
           sourceBundleIdentifier, targetBundleIdentifier, eventLabel);

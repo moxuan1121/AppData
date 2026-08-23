@@ -181,6 +181,16 @@
     [self setObject:uniqueApplications forKey:key];
 }
 
+#pragma mark - Per-App Cache Automation
+
++ (BOOL)automaticallyClearsCachesForBundleIdentifier:(NSString *)bundleIdentifier {
+    return [self launchControlValueForPrefix:kAutoClearCachesPrefix bundleIdentifier:bundleIdentifier];
+}
+
++ (void)setAutomaticallyClearsCaches:(BOOL)enabled bundleIdentifier:(NSString *)bundleIdentifier {
+    [self setLaunchControlValue:enabled prefix:kAutoClearCachesPrefix bundleIdentifier:bundleIdentifier];
+}
+
 + (BOOL)shouldBlockSourceBundleIdentifier:(NSString *)sourceBundleIdentifier targetBundleIdentifier:(NSString *)targetBundleIdentifier {
     if (sourceBundleIdentifier.length == 0 || targetBundleIdentifier.length == 0) return NO;
     if ([sourceBundleIdentifier isEqualToString:targetBundleIdentifier]) return NO;

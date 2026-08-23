@@ -39,6 +39,14 @@ The package identifier is `com.moxuan.appdata` and it replaces the former
 removes AppData, then restore the canonical link to `/var/jb/usr/lib/TweakInject`
 when necessary. No ElleKit binary, loader, or package is removed by AppData.
 
+## Per-app automatic cache clearing
+
+Long-pressing the cache action toggles automatic clearing for the application
+whose AppData panel is open. The preference is stored under that application's
+bundle identifier; it is not a global cache switch. On a permitted launch,
+AppData clears only the selected application's `Library/Caches` and `tmp`
+contents, with duplicate launch requests coalesced while a clear is running.
+
 ## Screenshot
 
 <img src="https://raw.githubusercontent.com/FouadRaheb/AppData/master/Screenshots/1.jpg" width="350"> <img src="https://raw.githubusercontent.com/FouadRaheb/AppData/master/Screenshots/2.jpg" width="350">

@@ -771,10 +771,7 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
                 __weak ADActionsBarView *weakActionsBar = actionsBar;
 
                 // 1. Clear Caches
-                [actionsBar addItemWithTitle:@"清理缓存"
-                                      detail:@"计算中..."
-                                       image:[ADHelper imageNamed:@"ClearCache"]
-                                     handler:^{
+                ADActionBarBlock clearCacheHandler = ^{
                     NSInteger itemIndex = 0;
                     [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
                     [weakActionsBar setDetail:@"清理中..." forItemAtIndex:itemIndex];
@@ -784,13 +781,37 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
                             [weakActionsBar setDetail:@"已清除!" forItemAtIndex:itemIndex];
                             [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
                             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                                [self.appData getCachesDirectorySizeWithCompletion:^(NSString *formattedSize) {
-                                    [weakActionsBar setDetail:formattedSize forItemAtIndex:itemIndex];
-                                }];
+                                if ([ADSettings automaticallyClearsCachesForBundleIdentifier:self.appData.bundleIdentifier]) {
+                                    [weakActionsBar setDetail:@"自动清理" forItemAtIndex:itemIndex];
+                                } else {
+                                    [self.appData getCachesDirectorySizeWithCompletion:^(NSString *formattedSize) {
+                                        [weakActionsBar setDetail:formattedSize forItemAtIndex:itemIndex];
+                                    }];
+                                }
                             });
                         }];
                     });
-                }];
+                };
+                ADActionBarBlock autoClearCacheHandler = ^{
+                    NSString *bundleIdentifier = self.appData.bundleIdentifier;
+                    BOOL enabled = ![ADSettings automaticallyClearsCachesForBundleIdentifier:bundleIdentifier];
+                    [ADSettings setAutomaticallyClearsCaches:enabled bundleIdentifier:bundleIdentifier];
+                    if (enabled) {
+                        [weakActionsBar setDetail:@"自动清理" forItemAtIndex:0];
+                        [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
+                    } else {
+                        [weakActionsBar setDetail:@"计算中..." forItemAtIndex:0];
+                        [self.appData getCachesDirectorySizeWithCompletion:^(NSString *formattedSize) {
+                            [weakActionsBar setDetail:formattedSize forItemAtIndex:0];
+                        }];
+                        [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeWarning];
+                    }
+                };
+                [actionsBar addItemWithTitle:@"清理缓存"
+                                      detail:@"计算中..."
+                                       image:[ADHelper imageNamed:@"ClearCache"]
+                                     handler:clearCacheHandler
+                            longPressHandler:autoClearCacheHandler];
 
                 // 2. Clear App Data
                 [actionsBar addItemWithTitle:@"清理数据"
@@ -1059,11 +1080,15 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
                     [actionsBar setItemEnabled:NO atIndex:3];
                 }
 
-                [actionsBar showLoadingIndicatorForItemAtIndex:0];
-                [self.appData getCachesDirectorySizeWithCompletion:^(NSString *formattedSize) {
-                    [actionsBar setDetail:formattedSize forItemAtIndex:0];
-                    [actionsBar hideLoadingIndicatorForItemAtIndex:0];
-                }];
+                if ([ADSettings automaticallyClearsCachesForBundleIdentifier:self.appData.bundleIdentifier]) {
+                    [actionsBar setDetail:@"自动清理" forItemAtIndex:0];
+                } else {
+                    [actionsBar showLoadingIndicatorForItemAtIndex:0];
+                    [self.appData getCachesDirectorySizeWithCompletion:^(NSString *formattedSize) {
+                        [actionsBar setDetail:formattedSize forItemAtIndex:0];
+                        [actionsBar hideLoadingIndicatorForItemAtIndex:0];
+                    }];
+                }
 
                 [actionsBar showLoadingIndicatorForItemAtIndex:1];
                 [self.appData getAppUsageDirectorySizeWithCompletion:^(NSString *formattedSize) {
