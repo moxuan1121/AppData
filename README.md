@@ -8,7 +8,7 @@ Compatible with iOS 11, 12, 13 and 14
 <ul>
     <li>View the app bundle version and size</li>
     <li>View and copy the app bundle identifier</li>
-    <li>Edit the app icon name</li>
+    <li>Open the current app by tapping its icon in the panel</li>
     <li>Clear or update the app badge count</li>
     <li>Check the app data/caches size and clear them</li>
     <li>Offload apps by uninstalling them and keeping data</li>

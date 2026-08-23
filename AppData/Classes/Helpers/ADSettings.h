@@ -13,8 +13,6 @@
 #define kForceTouchMenuEnabled                              @"ForceTouchMenuEnabled"
 #define kAppearance                                         @"kAppearance"
 
-#define kCustomAppNames                                     @"CustomAppNames"
-
 #define kBlockedFromLaunchingSafariPrefix                   @"IsBlockedFromLaunchingSafari"
 #define kBlockedFromLaunchingAppStorePrefix                 @"IsBlockedFromLaunchingAppStore"
 #define kBlockedFromLaunchingOthersPrefix                   @"IsBlockedFromLaunchingOthers"
@@ -41,10 +39,6 @@
 #pragma mark - Activation
 + (BOOL)swipeUpEnabled;
 + (BOOL)forceTouchMenuEnabled;
-
-#pragma mark - App Names
-+ (NSString *)customAppNameForBundleIdentifier:(NSString *)identifier;
-+ (void)setCustomAppName:(NSString *)name forBundleIdentifier:(NSString *)bundleIdentifier;
 
 #pragma mark - App Launch Control
 + (BOOL)isBlockedFromLaunchingOtherApplications:(NSString *)bundleIdentifier;

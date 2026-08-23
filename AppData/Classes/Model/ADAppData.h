@@ -15,8 +15,6 @@
 
 @interface ADAppData : NSObject
 
-@property (nonatomic, strong) SBIconView *iconView;
-
 @property (nonatomic, strong) UIImage *iconImage;
 
 - (NSString *)name;
@@ -46,11 +44,6 @@
 
 + (ADAppData *)appDataForBundleIdentifier:(NSString *)bundleIdentifier iconImage:(UIImage *)iconImage;
 - (BOOL)isApplication;
-
-#pragma mark - Icon Name
-
-- (NSString *)customIconName;
-- (void)setCustomIconName:(NSString *)name;
 
 #pragma mark - AppStore
 

@@ -63,6 +63,7 @@
 - (NSArray<LSApplicationProxy *> *)allInstalledApplications;
 - (BOOL)uninstallApplication:(NSString *)bundleIdentifier withOptions:(NSDictionary *)options error:(NSError **)error;
 - (BOOL)uninstallApplication:(NSString *)bundleIdentifier withOptions:(NSDictionary *)options;
+- (BOOL)openApplicationWithBundleID:(NSString *)bundleIdentifier;
 @end
 
 // SpringBoard
@@ -97,7 +98,6 @@
 @property (nonatomic, retain) SBFolderIcon * folderIcon;
 - (id)_iconImageView;
 - (id)iconImageView; // iOS 15+ 兼容
-- (void)_updateLabel;
 - (BOOL)ad_isSupportedIcon;
 @end
 

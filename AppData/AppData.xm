@@ -6,17 +6,6 @@
 - (void)ad_updateSwipeGestureAvailability;
 @end
 
-// 声明 iOS 15/16 渲染相关的结构体和接口
-struct SBIconImageInfo {
-    CGSize size;
-    CGFloat scale;
-    CGFloat continuousCornerRadius;
-};
-
-// 修复重复声明：只声明 SBLeafIcon 继承自 Headers.h 中的 SBIcon
-@interface SBLeafIcon : SBIcon
-@end
-
 @interface SBMainWorkspace : NSObject
 @end
 
@@ -141,31 +130,6 @@ static SBIconView *ADApplicationIconViewForImageView(UIView *imageView) {
 %new
 - (void)appDataPreferencesChanged {
     [self ad_updateSwipeGestureAvailability];
-
-    // 刷新图标缓存与显示
-    if ([self respondsToSelector:@selector(clearCachedImages)]) {
-        [self performSelector:@selector(clearCachedImages)];
-    }
-    if ([self respondsToSelector:@selector(clearIconImageInfo)]) {
-        [self performSelector:@selector(clearIconImageInfo)];
-    }
-    if ([self respondsToSelector:@selector(iconImageDidUpdate:)]) {
-        [self performSelector:@selector(iconImageDidUpdate:) withObject:nil];
-    }
-    if ([self respondsToSelector:@selector(updateImageAnimated:)]) {
-        NSMethodSignature *sig = [self methodSignatureForSelector:@selector(updateImageAnimated:)];
-        if (sig) {
-            NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
-            BOOL animated = NO;
-            [inv setSelector:@selector(updateImageAnimated:)];
-            [inv setTarget:self];
-            [inv setArgument:&animated atIndex:2];
-            [inv invoke];
-        }
-    }
-
-    [self setNeedsDisplay];
-    [self setNeedsLayout];
 }
 
 %new
@@ -202,84 +166,6 @@ static SBIconView *ADApplicationIconViewForImageView(UIView *imageView) {
         }
     }
     return NO;
-}
-
-%end
-
-#pragma mark - Custom App Icon Name
-
-%hook SBApplication
-
-- (NSString *)displayName {
-    if ([self respondsToSelector:@selector(bundleIdentifier)]) {
-        NSString *customAppName = [ADSettings customAppNameForBundleIdentifier:self.bundleIdentifier];
-        return customAppName ? : %orig;
-    }
-    return %orig;
-}
-
-%end
-
-
-#pragma mark - Custom Icon Replacement (SBLeafIcon)
-
-%hook SBLeafIcon
-
-// 1. 恢复了原本正确的重绘逻辑（带有 UIGraphicsBeginImageContextWithOptions），这保证了修改后图标能【立即生效】
-- (UIImage *)generateIconImageWithInfo:(struct SBIconImageInfo)info {
-    NSString *bundleID = nil;
-    if ([self respondsToSelector:@selector(applicationBundleIdentifier)]) {
-        bundleID = [self performSelector:@selector(applicationBundleIdentifier)];
-    } else if ([self respondsToSelector:@selector(applicationBundleID)]) {
-        bundleID = [self performSelector:@selector(applicationBundleID)];
-    }
-    
-    if (bundleID) {
-        NSString *customIconPath = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
-        
-        if ([[NSFileManager defaultManager] fileExistsAtPath:customIconPath]) {
-            UIImage *customImage = [UIImage imageWithContentsOfFile:customIconPath];
-            if (customImage) {
-                UIGraphicsBeginImageContextWithOptions(info.size, NO, info.scale);
-                UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(0, 0, info.size.width, info.size.height) cornerRadius:info.continuousCornerRadius];
-                [path addClip];
-                [customImage drawInRect:CGRectMake(0, 0, info.size.width, info.size.height)];
-                UIImage *finalIcon = UIGraphicsGetImageFromCurrentImageContext();
-                UIGraphicsEndImageContext();
-                
-                return finalIcon;
-            }
-        }
-    }
-    return %orig;
-}
-
-// 2. 终极修复：拦截 iOS 14+ 动画引擎请求的“无遮罩”纯净图标，这保证了打开/退出软件时【不再闪回原版图标】
-- (UIImage *)unmaskedIconImageWithInfo:(struct SBIconImageInfo)info {
-    NSString *bundleID = nil;
-    if ([self respondsToSelector:@selector(applicationBundleIdentifier)]) {
-        bundleID = [self performSelector:@selector(applicationBundleIdentifier)];
-    } else if ([self respondsToSelector:@selector(applicationBundleID)]) {
-        bundleID = [self performSelector:@selector(applicationBundleID)];
-    }
-    
-    if (bundleID) {
-        NSString *customIconPath = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
-        
-        if ([[NSFileManager defaultManager] fileExistsAtPath:customIconPath]) {
-            UIImage *customImage = [UIImage imageWithContentsOfFile:customIconPath];
-            if (customImage) {
-                // 无遮罩（unmasked）图像不需要切圆角，但是必须缩放到正确的 size 返回给动画引擎
-                UIGraphicsBeginImageContextWithOptions(info.size, NO, info.scale);
-                [customImage drawInRect:CGRectMake(0, 0, info.size.width, info.size.height)];
-                UIImage *finalIcon = UIGraphicsGetImageFromCurrentImageContext();
-                UIGraphicsEndImageContext();
-                
-                return finalIcon;
-            }
-        }
-    }
-    return %orig;
 }
 
 %end

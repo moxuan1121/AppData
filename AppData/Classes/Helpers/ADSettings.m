@@ -111,25 +111,6 @@
     }
 }
 
-#pragma mark - Custom App Names
-
-+ (NSString *)customAppNameForBundleIdentifier:(NSString *)identifier {
-    return [[ADSettings.sharedInstance.userDefaults dictionaryForKey:kCustomAppNames] objectForKey:identifier];
-}
-
-+ (void)setCustomAppName:(NSString *)name forBundleIdentifier:(NSString *)bundleIdentifier {
-    if (!bundleIdentifier) return;
-    
-    NSDictionary *dictionary = [ADSettings.sharedInstance.userDefaults dictionaryForKey:kCustomAppNames];
-    NSMutableDictionary *mutableDictionary = dictionary ? [dictionary mutableCopy] : [NSMutableDictionary new];
-    if (name) {
-        [mutableDictionary setObject:name forKey:bundleIdentifier];
-    } else {
-        [mutableDictionary removeObjectForKey:bundleIdentifier];
-    }
-    [ADSettings.sharedInstance.userDefaults setObject:mutableDictionary forKey:kCustomAppNames];
-}
-
 #pragma mark - App Launch Control
 
 + (NSString *)launchControlKeyWithPrefix:(NSString *)prefix bundleIdentifier:(NSString *)bundleIdentifier {

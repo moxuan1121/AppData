@@ -8,8 +8,7 @@
 #import <UIKit/UIKit.h>
 #import "ADAppData.h"
 
-// 新增 UIImagePickerControllerDelegate, UINavigationControllerDelegate 支持相册选取
-@interface ADDataViewController : UIViewController <UIImagePickerControllerDelegate, UINavigationControllerDelegate>
+@interface ADDataViewController : UIViewController
 
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UITableView *moreTableView;
@@ -19,7 +18,6 @@
 - (instancetype)initWithAppData:(ADAppData *)data;
 
 + (void)presentControllerFromSBIconView:(SBIconView *)iconView fromContextMenu:(BOOL)contextMenu;
-+ (void)presentControllerFromSBIconImageView:(SBIconImageView *)iconImageView fromContextMenu:(BOOL)contextMenu;
 
 - (void)switchTableViews;
 

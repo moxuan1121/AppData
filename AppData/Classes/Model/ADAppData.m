@@ -166,19 +166,6 @@
     return self.sbApplication != nil;
 }
 
-#pragma mark - Icon Name
-
-- (NSString *)customIconName {
-    return [ADSettings customAppNameForBundleIdentifier:self.bundleIdentifier];
-}
-
-- (void)setCustomIconName:(NSString *)name {
-    [ADSettings setCustomAppName:name forBundleIdentifier:self.bundleIdentifier];
-    if (self.iconView && [self.iconView respondsToSelector:@selector(_updateLabel)]) {
-        [self.iconView _updateLabel];
-    }
-}
-
 #pragma mark - AppStore
 
 - (BOOL)hasAppStoreApp {

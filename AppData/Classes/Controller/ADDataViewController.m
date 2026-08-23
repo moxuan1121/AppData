@@ -12,13 +12,12 @@
 #import "ADMainDataSource.h"
 #import "ADMoreDataSource.h"
 #import <objc/runtime.h>
-#import <AudioToolbox/AudioToolbox.h>
 
 #ifndef IS_IPAD
 #define IS_IPAD (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad)
 #endif
 
-@interface ADDataViewController () <UIGestureRecognizerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate>
+@interface ADDataViewController () <UIGestureRecognizerDelegate>
 
 @property (nonatomic, strong) ADDataPresentationManager *presentationManager;
 
@@ -28,7 +27,6 @@
 
 @property (nonatomic, strong) UIImageView *iconImageView;
 @property (nonatomic, strong) UIButton *nameLabel;
-@property (nonatomic, strong) UIButton *nameEditButton;
 @property (nonatomic, strong) UIButton *identifierLabel;
 @property (nonatomic, strong) UIButton *identifierCopyButton;
 @property (nonatomic, strong) UILabel *versionLabel;
@@ -46,66 +44,9 @@
 
 @implementation ADDataViewController
 
-#pragma mark - Icon Helpers
-
-static inline SBIconImageView *ADGetIconImageViewFromIconView(SBIconView *iconView) {
-    if (!iconView) return nil;
-
-    SBIconImageView *iconImageView = nil;
-
-    if ([iconView respondsToSelector:@selector(iconImageView)]) {
-        iconImageView = [iconView performSelector:@selector(iconImageView)];
-    } else if ([iconView respondsToSelector:@selector(_iconImageView)]) {
-        iconImageView = [iconView _iconImageView];
-    } else {
-        Ivar ivar = class_getInstanceVariable(object_getClass(iconView), "_iconImageView");
-        if (ivar) {
-            iconImageView = object_getIvar(iconView, ivar);
-        }
-    }
-
-    if (!iconImageView) {
-        for (UIView *subview in iconView.subviews) {
-            if ([subview isKindOfClass:NSClassFromString(@"SBIconImageView")]) {
-                iconImageView = (SBIconImageView *)subview;
-                break;
-            }
-        }
-    }
-
-    return iconImageView;
-}
-
 static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
     // 58pt 图标用 13 左右会比较接近系统那种“微圆”
     return round(side * 0.224f);
-}
-
-static UIImage *ADRoundedSquareIconImage(UIImage *image) {
-    if (!image) return nil;
-
-    CGSize size = image.size;
-    CGFloat side = MIN(size.width, size.height);
-    CGRect cropRect = CGRectMake((size.width - side) * 0.5f,
-                                 (size.height - side) * 0.5f,
-                                 side,
-                                 side);
-
-    UIGraphicsBeginImageContextWithOptions(CGSizeMake(side, side), NO, image.scale);
-    CGContextRef ctx = UIGraphicsGetCurrentContext();
-
-    CGFloat radius = ADIconContinuousCornerRadiusForSide(side);
-    UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(0, 0, side, side)
-                                                    cornerRadius:radius];
-    [path addClip];
-
-    [image drawAtPoint:CGPointMake(-cropRect.origin.x, -cropRect.origin.y)];
-
-    UIImage *roundedImage = UIGraphicsGetImageFromCurrentImageContext();
-    CGContextFlush(ctx);
-    UIGraphicsEndImageContext();
-
-    return roundedImage;
 }
 
 - (void)applyRoundedStyleToPreviewIconView {
@@ -174,17 +115,6 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
     [self presentControllerFromSBIconImageView:_iconImageView iconView:iconView fromContextMenu:contextMenu];
 }
 
-#pragma mark - Used from Swipe Up
-
-+ (void)presentControllerFromSBIconImageView:(SBIconImageView *)iconImageView fromContextMenu:(BOOL)contextMenu {
-    SBIconView *iconView = (SBIconView *)[iconImageView superview];
-    if (![iconView respondsToSelector:@selector(icon)]) {
-        NSLog(@"iconView: %@", iconView);
-        iconView = (SBIconView *)[iconView superview];
-    }
-    [self presentControllerFromSBIconImageView:iconImageView iconView:iconView fromContextMenu:contextMenu];
-}
-
 #pragma mark - Internal
 
 + (void)presentControllerFromSBIconImageView:(SBIconImageView *)iconImageView iconView:(SBIconView *)iconView fromContextMenu:(BOOL)contextMenu {
@@ -221,20 +151,11 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
         }
         
         if (!bundleID) {
-            // Web clips, Shortcuts home-screen icons and other unsupported icons
-            // do not represent an installed application. Warn without visual UI.
-            if (@available(iOS 10.0, *)) {
-                [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeWarning];
-            } else {
-                AudioServicesPlaySystemSound(kSystemSoundID_Vibrate);
-            }
             return;
         }
         
         ADAppData *appData = [ADAppData appDataForBundleIdentifier:bundleID iconImage:iconImageView.contentsImage];
         if (appData) {
-            appData.iconView = iconView;
-            
             [[UISelectionFeedbackGenerator new] selectionChanged];
             ADDataViewController *dataViewController = [[ADDataViewController alloc] initWithAppData:appData];
             
@@ -324,7 +245,6 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
     [super viewWillDisappear:animated];
     
     // isBeingDismissed 判断确保：只有在面板真正被关闭时才恢复。
-    // 如果是从面板弹出相册选取图片，不触发恢复。
     if (self.isBeingDismissed) {
         if (self.dockDismissed) {
             self.dockDismissed = NO;
@@ -364,22 +284,14 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
 }
 
 - (void)configureViewWithAppData {
-    // 初始化时，如果本地有自定义图标，则读取显示，否则显示原始图标
-    NSString *bundleID = self.appData.bundleIdentifier;
-    NSString *customPath = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
-    if ([[NSFileManager defaultManager] fileExistsAtPath:customPath]) {
-        self.iconImageView.image = [UIImage imageWithContentsOfFile:customPath];
-    } else {
-        self.iconImageView.image = self.appData.iconImage;
-    }
+    self.iconImageView.image = self.appData.iconImage;
 
     [self applyRoundedStyleToPreviewIconView];
     
     self.appStoreButton.hidden = ![self.appData hasAppStoreApp];
     
     if ([self.appData isApplication]) {
-        NSString *customIconName = self.appData.customIconName;
-        [self.nameLabel setTitle:customIconName ?: self.appData.name forState:UIControlStateNormal];
+        [self.nameLabel setTitle:self.appData.name forState:UIControlStateNormal];
         [self.identifierLabel setTitle:self.appData.bundleIdentifier forState:UIControlStateNormal];
         if (self.appData.diskUsage > 0 && self.appData.diskUsageString) {
             self.versionLabel.text = [self.appData.version stringByAppendingFormat:@"  —  %@", self.appData.diskUsageString];
@@ -396,7 +308,6 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
         [self.versionLabel setText:@"—"];
         
         self.identifierCopyButton.hidden = YES;
-        self.nameEditButton.hidden = YES;
     }
 }
 
@@ -450,7 +361,7 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
     UIButton *iconButton = [UIButton buttonWithType:UIButtonTypeCustom];
     iconButton.translatesAutoresizingMaskIntoConstraints = NO;
     iconButton.backgroundColor = [UIColor clearColor];
-    [iconButton addTarget:self action:@selector(didTapIconImageView:) forControlEvents:UIControlEventTouchUpInside];
+    [iconButton addTarget:self action:@selector(didTapOpenApplicationIcon:) forControlEvents:UIControlEventTouchUpInside];
     [containerView addSubview:iconButton];
     [iconButton.leadingAnchor constraintEqualToAnchor:self.iconImageView.leadingAnchor].active = YES;
     [iconButton.topAnchor constraintEqualToAnchor:self.iconImageView.topAnchor].active = YES;
@@ -458,7 +369,7 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
     [iconButton.heightAnchor constraintEqualToAnchor:self.iconImageView.heightAnchor].active = YES;
     
     self.nameLabel = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.nameLabel addTarget:self action:@selector(didTapNameButton:) forControlEvents:UIControlEventTouchUpInside];
+    self.nameLabel.userInteractionEnabled = NO;
     self.nameLabel.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     self.nameLabel.titleLabel.font = [UIFont systemFontOfSize:17];
     
@@ -468,25 +379,7 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
     [self.nameLabel.topAnchor constraintEqualToAnchor:containerView.topAnchor constant:15].active = YES;
     [self.nameLabel.leadingAnchor constraintEqualToAnchor:self.iconImageView.trailingAnchor constant:11].active = YES;
     [self.nameLabel.heightAnchor constraintEqualToConstant:22].active = YES;
-    [self.nameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.appStoreButton.leadingAnchor constant:-(22 + 11)].active = YES;
-    
-    UIImage *nameEditImage = nil;
-    if (@available(iOS 13.0, *)) {
-        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithWeight:UIImageSymbolWeightBold];
-        nameEditImage = [[UIImage systemImageNamed:@"square.and.pencil" withConfiguration:config] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-    } else {
-        nameEditImage = [[ADHelper imageNamed:@"EditIconButton"] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-    }
-    self.nameEditButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.nameEditButton setImage:nameEditImage forState:UIControlStateNormal];
-    [self.nameEditButton addTarget:self action:@selector(didTapNameButton:) forControlEvents:UIControlEventTouchUpInside];
-    [self.nameEditButton setTranslatesAutoresizingMaskIntoConstraints:NO];
-    [containerView addSubview:self.nameEditButton];
-    [self.nameEditButton setContentEdgeInsets:UIEdgeInsetsMake(4.75, 4.75, 4.75, 4.75)];
-    [self.nameEditButton.heightAnchor constraintEqualToConstant:22].active = YES;
-    [self.nameEditButton.widthAnchor constraintEqualToConstant:22].active = YES;
-    [self.nameEditButton.centerYAnchor constraintEqualToAnchor:self.nameLabel.centerYAnchor].active = YES;
-    [self.nameEditButton.leadingAnchor constraintEqualToAnchor:self.nameLabel.trailingAnchor constant:2].active = YES;
+    [self.nameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.appStoreButton.leadingAnchor constant:-11].active = YES;
     
     self.identifierLabel = [UIButton buttonWithType:UIButtonTypeCustom];
     [self.identifierLabel addTarget:self action:@selector(didTapIdentifierButton:) forControlEvents:UIControlEventTouchUpInside];
@@ -556,7 +449,6 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
     [self.identifierLabel setTitleColor:secondaryLabelsColor forState:UIControlStateNormal];
     self.versionLabel.textColor = secondaryLabelsColor;
     [self.identifierCopyButton setTintColor:secondaryLabelsColor];
-    [self.nameEditButton setTintColor:secondaryLabelsColor];
     [self.appStoreButton setTintColor:secondaryLabelsColor];
     
     self.tableView.separatorColor = [ADAppearance.sharedInstance tableSeparatorColor];
@@ -587,11 +479,6 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
 
 #pragma mark - Actions
 
-- (void)didTapNameButton:(UIButton *)button {
-    [[UISelectionFeedbackGenerator new] selectionChanged];
-    [self showCustomIconNameInterface];
-}
-
 - (void)didTapIdentifierButton:(UIButton *)button {
     if (!self.isCopyingIdentifier) {
         self.isCopyingIdentifier = YES;
@@ -617,38 +504,6 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
         }];
     } else {
         [self.appData openInAppStore];
-    }
-}
-
-- (void)showCustomIconNameInterface {
-    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"修改名称" message:@"输入新的应用图标名称" preferredStyle:UIAlertControllerStyleAlert];
-    [alertController addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
-        if (self.dockDismissed && IS_IPAD) [self.class presentFloatingDockIfNeeded];
-    }]];
-    [alertController addAction:[UIAlertAction actionWithTitle:@"修改" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [self.appData setCustomIconName:alertController.textFields.firstObject.text];
-        [self.nameLabel setTitle:self.appData.name forState:UIControlStateNormal];
-        if (self.dockDismissed && IS_IPAD) [self.class presentFloatingDockIfNeeded];
-    }]];
-    [alertController addAction:[UIAlertAction actionWithTitle:@"重置" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [self.appData setCustomIconName:nil];
-        [self.nameLabel setTitle:self.appData.name forState:UIControlStateNormal];
-        if (self.dockDismissed && IS_IPAD) [self.class presentFloatingDockIfNeeded];
-    }]];
-    [alertController addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.clearButtonMode = UITextFieldViewModeAlways;
-        textField.placeholder = @"应用名称";
-        textField.text = self.nameLabel.titleLabel.text;
-    }];
-    if (IS_IPAD) {
-        self.dockDismissed = [self.class dismissFloatingDockIfNeededWithCompletion:^{
-            [self presentViewController:alertController animated:YES completion:nil];
-        }];
-        if (!self.dockDismissed) {
-            [self presentViewController:alertController animated:YES completion:nil];
-        }
-    } else {
-        [self presentViewController:alertController animated:YES completion:nil];
     }
 }
 
@@ -739,132 +594,17 @@ static UIImage *ADRoundedSquareIconImage(UIImage *image) {
     [viewController ?: [UIApplication sharedApplication].keyWindow.rootViewController presentViewController:alertController animated:YES completion:nil];
 }
 
-#pragma mark - Custom Icon Replacement
+- (void)didTapOpenApplicationIcon:(id)sender {
+    NSString *bundleIdentifier = self.appData.bundleIdentifier;
+    if (![self.appData isApplication] || bundleIdentifier.length == 0) return;
 
-- (void)didTapIconImageView:(id)sender {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"修改图标"
-                                                                   message:@"选择要执行的操作"
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-
-    [alert addAction:[UIAlertAction actionWithTitle:@"从相册选择"
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction * _Nonnull action) {
-        [self performSelector:@selector(presentImagePickerForCustomIcon) withObject:nil afterDelay:0.05];
-    }]];
-
-    [alert addAction:[UIAlertAction actionWithTitle:@"恢复默认图标"
-                                              style:UIAlertActionStyleDestructive
-                                            handler:^(UIAlertAction * _Nonnull action) {
-        [self resetCustomIcon];
-    }]];
-
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
-                                              style:UIAlertActionStyleCancel
-                                            handler:nil]];
-
-    BOOL dismissed = [self.class dismissFloatingDockIfNeededWithCompletion:^{
-        [self presentViewController:alert animated:YES completion:nil];
+    [[UISelectionFeedbackGenerator new] selectionChanged];
+    [self dismissAppDataControllerAnimated:YES completion:^{
+        LSApplicationWorkspace *workspace = [NSClassFromString(@"LSApplicationWorkspace") defaultWorkspace];
+        if ([workspace respondsToSelector:@selector(openApplicationWithBundleID:)]) {
+            [workspace openApplicationWithBundleID:bundleIdentifier];
+        }
     }];
-    self.dockDismissed = dismissed;
-
-    if (!dismissed) {
-        [self presentViewController:alert animated:YES completion:nil];
-    }
-}
-
-- (void)presentImagePickerForCustomIcon {
-    UIImagePickerController *picker = [[UIImagePickerController alloc] init];
-    picker.delegate = self;
-    picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
-    picker.allowsEditing = YES;
-    [self presentViewController:picker animated:YES completion:nil];
-}
-
-- (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<NSString *,id> *)info {
-    [picker dismissViewControllerAnimated:YES completion:nil];
-    
-    UIImage *image = info[UIImagePickerControllerEditedImage] ?: info[UIImagePickerControllerOriginalImage];
-    if (image) {
-        [self saveCustomIcon:image];
-    }
-    
-    if (self.dockDismissed && IS_IPAD) {
-        [self.class presentFloatingDockIfNeeded];
-    }
-}
-
-- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
-    [picker dismissViewControllerAnimated:YES completion:nil];
-    
-    if (self.dockDismissed && IS_IPAD) {
-        [self.class presentFloatingDockIfNeeded];
-    }
-}
-
-- (void)saveCustomIcon:(UIImage *)image {
-    NSString *bundleID = self.appData.bundleIdentifier;
-    if (!bundleID) return;
-
-    NSString *dirPath = @"/var/mobile/Library/Preferences/AppDataIcons";
-    if (![[NSFileManager defaultManager] fileExistsAtPath:dirPath]) {
-        [[NSFileManager defaultManager] createDirectoryAtPath:dirPath
-                                  withIntermediateDirectories:YES
-                                                   attributes:nil
-                                                        error:nil];
-    }
-
-    UIImage *finalImage = ADRoundedSquareIconImage(image);
-    if (!finalImage) {
-        finalImage = image;
-    }
-    
-    NSString *path = [dirPath stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.png", bundleID]];
-    [UIImagePNGRepresentation(finalImage) writeToFile:path atomically:YES];
-
-    [self refreshSBIcon];
-}
-
-- (void)resetCustomIcon {
-    NSString *bundleID = self.appData.bundleIdentifier;
-    if (!bundleID) return;
-
-    NSString *path = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
-    if ([[NSFileManager defaultManager] fileExistsAtPath:path]) {
-        [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
-    }
-
-    [self refreshSBIcon];
-    [self dismiss];
-}
-
-- (void)refreshSBIcon {
-    NSString *bundleID = self.appData.bundleIdentifier;
-    NSString *path = [NSString stringWithFormat:@"/var/mobile/Library/Preferences/AppDataIcons/%@.png", bundleID];
-    
-    // 1. 刷新当前 AppData 面板显示的图标
-    if ([[NSFileManager defaultManager] fileExistsAtPath:path]) {
-        self.iconImageView.image = [UIImage imageWithContentsOfFile:path];
-    } else {
-        self.iconImageView.image = self.appData.iconImage;
-    }
-
-    [self applyRoundedStyleToPreviewIconView];
-
-    // 2. 优先刷新当前桌面 icon image view
-    if (self.appData.iconView) {
-        SBIconImageView *iconImageView = ADGetIconImageViewFromIconView(self.appData.iconView);
-        if (iconImageView && [iconImageView respondsToSelector:@selector(appDataPreferencesChanged)]) {
-            [iconImageView performSelector:@selector(appDataPreferencesChanged)];
-        }
-    }
-
-    // 3. 兜底通知 SpringBoard icon model
-    if (self.appData.iconView && [self.appData.iconView respondsToSelector:@selector(icon)]) {
-        id sbIcon = [self.appData.iconView performSelector:@selector(icon)];
-        if ([sbIcon respondsToSelector:@selector(iconImageDidUpdate:)]) {
-            [sbIcon performSelector:@selector(iconImageDidUpdate:) withObject:nil];
-        }
-    }
 }
 
 @end
