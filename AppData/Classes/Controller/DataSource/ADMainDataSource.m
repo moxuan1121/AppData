@@ -449,7 +449,22 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
     // before the system password sheet finishes and the original downgrade request
     // is resumed too early. StoreServices retains the authenticated account session;
     // AppData never receives or stores the password itself.
-    BOOL saved = [store saveAccount:targetAccount verifyCredentials:YES error:error];
+    NSError *verificationError = nil;
+    BOOL saved = [store saveAccount:targetAccount verifyCredentials:YES error:&verificationError];
+    if (!saved || verificationError) {
+        // A secondary Media & Purchases account can be saved and usable while
+        // StoreServices refuses to verify it from SpringBoard (commonly after
+        // switching back to the iCloud account's storefront). Match StoreSwitcher:
+        // persist that already-known account without verification and let the
+        // AppStoreDaemon purchase request perform any authentication it requires.
+        NSLog(@"[AppData Downgrade] StoreServices verification unavailable; retrying saved-account switch (%@/%ld)",
+              verificationError.domain ?: @"unknown", (long)verificationError.code);
+        NSError *switchError = nil;
+        saved = [store saveAccount:targetAccount verifyCredentials:NO error:&switchError];
+        if (!saved || switchError) {
+            if (error) *error = switchError ?: verificationError;
+        }
+    }
     if (!saved || (error && *error)) {
         for (SSAccount *account in accounts) {
             [account setActive:(account == previousAccount)];
@@ -517,9 +532,8 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
             if (completion) completion(NO);
             return;
         }
-        // Let StoreServices publish the new authenticated account/storefront before
-        // rebuilding the purchase request. The password sheet has completed when
-        // saveAccount:verifyCredentials:error: returns successfully.
+        // Let StoreServices publish the selected account/storefront before rebuilding
+        // the purchase request. AppStoreDaemon handles any remaining authentication.
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.75 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
             [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
             if (completion) completion(YES);
