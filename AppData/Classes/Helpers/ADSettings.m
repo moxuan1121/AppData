@@ -179,15 +179,26 @@
     if ([systemLaunchSources containsObject:sourceBundleIdentifier]) return NO;
 
     NSString *sourcePrefix = kBlockedFromLaunchingOthersPrefix;
-    if ([targetBundleIdentifier isEqualToString:@"com.apple.mobilesafari"]) {
+    if ([targetBundleIdentifier isEqualToString:@"com.apple.mobilesafari"]
+        || [targetBundleIdentifier isEqualToString:@"com.apple.SafariViewService"]) {
         sourcePrefix = kBlockedFromLaunchingSafariPrefix;
     } else if ([targetBundleIdentifier isEqualToString:@"com.apple.AppStore"]
-               || [targetBundleIdentifier isEqualToString:@"com.apple.MobileStore"]) {
+               || [targetBundleIdentifier isEqualToString:@"com.apple.MobileStore"]
+               || [targetBundleIdentifier isEqualToString:@"com.apple.ios.StoreKitUIService"]) {
         sourcePrefix = kBlockedFromLaunchingAppStorePrefix;
     }
 
-    return [self launchControlValueForPrefix:sourcePrefix bundleIdentifier:sourceBundleIdentifier]
-        || [self isBlockedFromBeingLaunched:targetBundleIdentifier];
+    if ([self launchControlValueForPrefix:sourcePrefix bundleIdentifier:sourceBundleIdentifier]) return YES;
+
+    if ([self isBlockedFromBeingLaunched:targetBundleIdentifier]) {
+        BOOL isSafariSource = [sourceBundleIdentifier isEqualToString:@"com.apple.mobilesafari"]
+            || [sourceBundleIdentifier isEqualToString:@"com.apple.SafariViewService"];
+        // Match NoRedirect's safety rule: ordinary Apple/system sources remain allowed,
+        // while Safari and SafariViewService are treated as identifiable external sources.
+        if ([sourceBundleIdentifier hasPrefix:@"com.apple."] && !isSafariSource) return NO;
+        return YES;
+    }
+    return NO;
 }
 
 @end

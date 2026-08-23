@@ -18,74 +18,47 @@ struct SBIconImageInfo {
 @interface SBMainWorkspace : NSObject
 @end
 
-static NSString *ADStringBundleIdentifier(id value) {
-    return [value isKindOfClass:[NSString class]] && [value length] > 0 ? value : nil;
-}
+@interface BSProcessHandle : NSObject
+@property(nonatomic, copy, readonly) NSString *bundleIdentifier;
+@property(nonatomic, copy, readonly) NSString *name;
+@end
 
-static NSString *ADBundleIdentifierFromObject(id object) {
-    if (!object || object == [NSNull null]) return nil;
-    NSString *directValue = ADStringBundleIdentifier(object);
-    if (directValue) return directValue;
+@interface SBApplicationSceneEntity : NSObject
+@property(nonatomic, strong, readonly) SBApplication *application;
+@property(nonatomic, copy, readonly) NSSet *actions;
+@end
 
-    if ([object isKindOfClass:[NSDictionary class]]) {
-        NSDictionary *dictionary = object;
-        NSArray *keys = @[
-            @"sourceApplication", @"sourceApplicationBundleIdentifier", @"sourceBundleIdentifier",
-            @"UIApplicationOpenURLOptionsSourceApplicationKey", @"_UIApplicationOpenURLOptionsSourceApplicationKey",
-            @"LSOpenConfigurationSourceApplication", @"bundleIdentifier"
-        ];
-        for (NSString *key in keys) {
-            id value = dictionary[key];
-            NSString *identifier = ADStringBundleIdentifier(value);
-            if (identifier) return identifier;
-            if (value && value != object) {
-                identifier = ADBundleIdentifierFromObject(value);
-                if (identifier) return identifier;
-            }
-        }
-        return nil;
+@interface SBLayoutElement : NSObject
+@property(nonatomic, copy, readonly) NSString *uniqueIdentifier;
+@end
+
+@interface SBLayoutState : NSObject
+- (SBLayoutElement *)elementWithRole:(long long)role;
+@end
+
+@interface SBWorkspaceApplicationSceneTransitionContext : NSObject
+@property(nonatomic, strong, readonly) SBLayoutState *previousLayoutState;
+@end
+
+@interface SBWorkspaceTransitionRequest : NSObject
+@property(nonatomic, copy, readonly) NSSet<SBApplicationSceneEntity *> *toApplicationSceneEntities;
+@property(nonatomic, copy, readonly) NSSet<SBApplicationSceneEntity *> *fromApplicationSceneEntities;
+@property(nonatomic, copy, readonly) NSString *eventLabel;
+@property(nonatomic, strong, readonly) BSProcessHandle *originatingProcess;
+@property(nonatomic, strong, readonly) SBWorkspaceApplicationSceneTransitionContext *applicationContext;
+- (void)declineWithReason:(id)reason;
+@end
+
+static NSString *ADBundleIdentifierFromPreviousLayout(SBWorkspaceTransitionRequest *request) {
+    SBLayoutElement *element = [request.applicationContext.previousLayoutState elementWithRole:1];
+    NSString *identifier = element.uniqueIdentifier;
+    if ([identifier hasPrefix:@"sceneID:"]) identifier = [identifier substringFromIndex:8];
+    if ([identifier hasSuffix:@"-default"]) {
+        identifier = [identifier substringToIndex:identifier.length - 8];
+    } else if (identifier.length > 37) {
+        identifier = [identifier substringToIndex:identifier.length - 37];
     }
-
-    NSArray *identifierSelectors = @[
-        NSStringFromSelector(@selector(sourceApplicationBundleIdentifier)),
-        NSStringFromSelector(@selector(applicationBundleIdentifier)),
-        NSStringFromSelector(@selector(bundleIdentifier))
-    ];
-    for (NSString *selectorName in identifierSelectors) {
-        SEL selector = NSSelectorFromString(selectorName);
-        if ([object respondsToSelector:selector]) {
-            id value = [object performSelector:selector];
-            NSString *identifier = ADStringBundleIdentifier(value);
-            if (identifier) return identifier;
-        }
-    }
-
-    SEL sourceSelector = NSSelectorFromString(@"sourceApplication");
-    if ([object respondsToSelector:sourceSelector]) {
-        id sourceApplication = [object performSelector:sourceSelector];
-        if (sourceApplication != object) return ADBundleIdentifierFromObject(sourceApplication);
-    }
-    return nil;
-}
-
-static NSString *ADTargetBundleIdentifier(id application) {
-    return ADBundleIdentifierFromObject(application);
-}
-
-static NSString *ADSourceBundleIdentifier(id options, id origin) {
-    NSString *identifier = ADBundleIdentifierFromObject(origin);
-    return identifier ?: ADBundleIdentifierFromObject(options);
-}
-
-static BOOL ADShouldBlockLaunch(id application, id options, id origin) {
-    NSString *targetBundleIdentifier = ADTargetBundleIdentifier(application);
-    NSString *sourceBundleIdentifier = ADSourceBundleIdentifier(options, origin);
-    BOOL blocked = [ADSettings shouldBlockSourceBundleIdentifier:sourceBundleIdentifier
-                                          targetBundleIdentifier:targetBundleIdentifier];
-    if (blocked) {
-        NSLog(@"[AppData Redirect] Blocked %@ -> %@", sourceBundleIdentifier, targetBundleIdentifier);
-    }
-    return blocked;
+    return identifier;
 }
 
 %group SHARED_HOOKS
@@ -382,25 +355,41 @@ static BOOL ADShouldBlockLaunch(id application, id options, id origin) {
 
 %hook SBMainWorkspace
 
-- (void)openApplication:(id)application withOptions:(id)options completion:(void (^)(BOOL))completion {
-    if (ADShouldBlockLaunch(application, options, nil)) {
-        if (completion) completion(NO);
-        return;
-    }
-    %orig;
-}
+- (BOOL)_canExecuteTransitionRequest:(id)transitionRequest forExecution:(BOOL)forExecution {
+    if (![transitionRequest isKindOfClass:%c(SBMainWorkspaceTransitionRequest)]) return %orig;
 
-- (void)openApplication:(id)application withOptions:(id)options origin:(id)origin completion:(void (^)(BOOL))completion {
-    if (ADShouldBlockLaunch(application, options, origin)) {
-        if (completion) completion(NO);
-        return;
+    SBWorkspaceTransitionRequest *request = (SBWorkspaceTransitionRequest *)transitionRequest;
+    NSString *eventLabel = request.eventLabel;
+    BOOL isFromBreadcrumb = [eventLabel containsString:@"ActivateFromBreadcrumb"];
+    if (eventLabel.length > 0) {
+        BOOL isRequesterLaunch = [eventLabel containsString:@"OpenApplication"]
+            && [eventLabel containsString:@"ForRequester"];
+        if (!isFromBreadcrumb && !isRequesterLaunch) return %orig;
     }
-    %orig;
-}
 
-- (BOOL)_openApplication:(id)application withOptions:(id)options origin:(id)origin transitionContext:(id)transitionContext {
-    if (ADShouldBlockLaunch(application, options, origin)) return NO;
-    return %orig;
+    NSString *sourceBundleIdentifier = nil;
+    SBApplicationSceneEntity *sourceEntity = request.fromApplicationSceneEntities.anyObject;
+    if (sourceEntity) {
+        id sourceAction = sourceEntity.actions.anyObject;
+        if (sourceAction && ![sourceAction isKindOfClass:%c(UIOpenURLAction)]) return %orig;
+        sourceBundleIdentifier = sourceEntity.application.bundleIdentifier;
+    } else {
+        NSString *originatingProcessName = request.originatingProcess.name;
+        if (isFromBreadcrumb || [originatingProcessName isEqualToString:@"lsd"]) {
+            sourceBundleIdentifier = ADBundleIdentifierFromPreviousLayout(request);
+        }
+    }
+    sourceBundleIdentifier = sourceBundleIdentifier ?: request.originatingProcess.bundleIdentifier;
+
+    SBApplicationSceneEntity *targetEntity = request.toApplicationSceneEntities.anyObject;
+    NSString *targetBundleIdentifier = targetEntity.application.bundleIdentifier;
+    if (![ADSettings shouldBlockSourceBundleIdentifier:sourceBundleIdentifier
+                                targetBundleIdentifier:targetBundleIdentifier]) return %orig;
+
+    NSLog(@"[AppData Redirect] Declined transition %@ -> %@ (%@)",
+          sourceBundleIdentifier, targetBundleIdentifier, eventLabel);
+    [request declineWithReason:@"AppData Redirect"];
+    return NO;
 }
 
 %end
