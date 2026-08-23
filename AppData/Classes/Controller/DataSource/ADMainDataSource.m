@@ -14,6 +14,10 @@
 #define IS_IPAD (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad)
 #endif
 
+@interface UIImage (ADApplicationIcon)
++ (UIImage *)_applicationIconImageForBundleIdentifier:(NSString *)bundleIdentifier format:(NSInteger)format scale:(CGFloat)scale;
+@end
+
 // ================= 新增：降级功能需要的私有 API 声明 =================
 @interface SSAccount : NSObject
 - (BOOL)isActive;
@@ -65,6 +69,7 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
 @property (nonatomic, strong) NSMutableSet<NSString *> *selectedBundleIdentifiers;
 @property (nonatomic, copy) ADAppSelectionCompletion completion;
 @property (nonatomic, strong) UISearchController *searchController;
+@property (nonatomic, strong) NSCache<NSString *, UIImage *> *iconCache;
 - (instancetype)initWithSelectedBundleIdentifiers:(NSArray<NSString *> *)selected excludingBundleIdentifier:(NSString *)excluded completion:(ADAppSelectionCompletion)completion;
 @end
 
@@ -74,6 +79,8 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
     if (self = [super initWithStyle:UITableViewStylePlain]) {
         self.title = @"选择指定应用";
         self.completion = completion;
+        self.iconCache = [NSCache new];
+        self.iconCache.countLimit = 160;
         self.selectedBundleIdentifiers = [NSMutableSet setWithArray:selected ?: @[]];
         NSArray *installed = [[NSClassFromString(@"LSApplicationWorkspace") defaultWorkspace] allInstalledApplications] ?: @[];
         if (excluded.length > 0) {
@@ -102,6 +109,32 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
     self.navigationItem.searchController = self.searchController;
     self.navigationItem.hidesSearchBarWhenScrolling = NO;
     self.tableView.tableFooterView = [UIView new];
+    self.tableView.rowHeight = 64.0;
+}
+
+- (UIImage *)displayIconForBundleIdentifier:(NSString *)bundleIdentifier {
+    if (bundleIdentifier.length == 0) return nil;
+    UIImage *cached = [self.iconCache objectForKey:bundleIdentifier];
+    if (cached) return cached;
+
+    UIImage *source = nil;
+    if ([UIImage respondsToSelector:@selector(_applicationIconImageForBundleIdentifier:format:scale:)]) {
+        source = [UIImage _applicationIconImageForBundleIdentifier:bundleIdentifier
+                                                             format:0
+                                                              scale:[UIScreen mainScreen].scale];
+    }
+    if (!source) return nil;
+
+    CGSize iconSize = CGSizeMake(42.0, 42.0);
+    UIGraphicsBeginImageContextWithOptions(iconSize, NO, 0.0);
+    UIBezierPath *clipPath = [UIBezierPath bezierPathWithRoundedRect:(CGRect){CGPointZero, iconSize} cornerRadius:9.5];
+    [clipPath addClip];
+    [source drawInRect:(CGRect){CGPointZero, iconSize}];
+    UIImage *displayIcon = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+
+    if (displayIcon) [self.iconCache setObject:displayIcon forKey:bundleIdentifier];
+    return displayIcon;
 }
 
 - (void)cancelSelection {
@@ -139,6 +172,9 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
     LSApplicationProxy *app = self.filteredApplications[indexPath.row];
     cell.textLabel.text = app.localizedName ?: app.bundleIdentifier;
     cell.detailTextLabel.text = app.bundleIdentifier;
+    cell.imageView.image = [self displayIconForBundleIdentifier:app.bundleIdentifier];
+    cell.imageView.contentMode = UIViewContentModeScaleAspectFit;
+    cell.imageView.clipsToBounds = YES;
     cell.accessoryType = [self.selectedBundleIdentifiers containsObject:app.bundleIdentifier]
         ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
     return cell;
