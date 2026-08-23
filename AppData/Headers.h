@@ -72,8 +72,6 @@
 @property (nonatomic, retain) SBApplicationInfo * info;
 @property (nonatomic,readonly) NSString * displayName;
 -(void)purgeCaches;
-@property (nonatomic,copy) id badgeValue; 
-@property (assign,nonatomic) id badgeNumberOrString; 
 - (NSString *)bundleIdentifier;
 @end
 
@@ -87,7 +85,6 @@
 - (NSString *)applicationBundleIdentifier;
 // iOS 15+ 兼容
 - (SBApplication *)application;
-- (NSInteger)badgeValue;
 @end
 
 @interface SBFolderIcon : SBIcon

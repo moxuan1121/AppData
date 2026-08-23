@@ -253,25 +253,6 @@
     }
 }
 
-#pragma mark - App Badges
-
-- (NSInteger)appBadgeCount {
-    if ([self.sbApplication respondsToSelector:@selector(badgeValue)]) {
-        return [[self.sbApplication badgeValue] integerValue];
-    } else if ([self.sbApplication respondsToSelector:@selector(badgeNumberOrString)]) {
-        return [[self.sbApplication badgeNumberOrString] integerValue];
-    }
-    return 0;
-}
-
-- (void)setAppBadgeCount:(NSInteger)badgeCount {
-    if ([self.sbApplication respondsToSelector:@selector(setBadgeValue:)]) {
-        [self.sbApplication setBadgeValue:[NSNumber numberWithInteger:badgeCount]];
-    } else {
-        [self.sbApplication setBadgeNumberOrString:[NSNumber numberWithInteger:badgeCount]];
-    }
-}
-
 #pragma mark - Permissions
 // 还原：这里回退为了原版基于 CFBundleRef 的代码
 - (NSArray <NSDictionary *> *)getPermissions {

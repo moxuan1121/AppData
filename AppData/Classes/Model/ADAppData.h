@@ -69,10 +69,6 @@
 - (void)getCachesDirectorySizeWithCompletion:(void(^)(NSString *formattedSize))completion;
 - (void)clearAppCachesWithCompletion:(void(^)())completion;
 
-#pragma mark - App Badges
-
-- (void)setAppBadgeCount:(NSInteger)badgeCount;
-- (NSInteger)appBadgeCount;
 #pragma mark - Uninstall App
 
 - (void)uninstallAppWithCompletion:(void(^)(BOOL success))completion;

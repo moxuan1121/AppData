@@ -377,57 +377,6 @@
                 [actionsBar.bottomAnchor constraintEqualToAnchor:cell.contentView.bottomAnchor].active = YES;
                 __weak ADActionsBarView *weakActionsBar = actionsBar;
 
-                // 修改角标暂时从 UI 隐藏；保留实现，待新版 UI 完成后再统一清理。
-#if 0
-                [actionsBar addItemWithTitle:@"修改角标"
-                                      detail:[NSString stringWithFormat:@"%td",[self.appData appBadgeCount]]
-                                       image:[ADHelper imageNamed:@"ClearBadge"]
-                                     handler:^{
-                    UIAlertController *alertController = [UIAlertController alertControllerWithTitle:@"应用角标"
-                                                                                             message:@"修改或清除当前应用的角标数量"
-                                                                                      preferredStyle:UIAlertControllerStyleAlert];
-                    [alertController addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-                        textField.text = [NSString stringWithFormat:@"%td",self.appData.appBadgeCount];
-                        textField.placeholder = @"角标数量";
-                        textField.textAlignment = NSTextAlignmentCenter;
-                        textField.enabled = NO;
-                    }];
-                    [alertController addAction:[UIAlertAction actionWithTitle:@"修改" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-                        UITextField *field = alertController.textFields.firstObject;
-                        NSInteger count = [field.text integerValue];
-                        [self.appData setAppBadgeCount:count];
-                        [weakActionsBar setDetail:@"已修改!" forItemAtIndex:0];
-                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                            [weakActionsBar setDetail:[NSString stringWithFormat:@"%td",count] forItemAtIndex:0];
-                        });
-                        if (self.dataViewController.dockDismissed && IS_IPAD) [ADDataViewController presentFloatingDockIfNeeded];
-                    }]];
-                    [alertController addAction:[UIAlertAction actionWithTitle:@"清除" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-                        [self.appData setAppBadgeCount:0];
-                        [weakActionsBar setDetail:@"已清除!" forItemAtIndex:0];
-                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                            [weakActionsBar setDetail:@"0" forItemAtIndex:0];
-                        });
-                        if (self.dataViewController.dockDismissed && IS_IPAD) [ADDataViewController presentFloatingDockIfNeeded];
-                    }]];
-                    [alertController addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
-                        if (self.dataViewController.dockDismissed && IS_IPAD) [ADDataViewController presentFloatingDockIfNeeded];
-                    }]];
-
-                    if (IS_IPAD) {
-                        self.dataViewController.dockDismissed = [ADDataViewController dismissFloatingDockIfNeededWithCompletion:^{
-                            [self.dataViewController presentViewController:alertController animated:YES completion:^{
-                                alertController.textFields.firstObject.enabled = true;
-                            }];
-                        }];
-                    } else {
-                        [self.dataViewController presentViewController:alertController animated:YES completion:^{
-                            alertController.textFields.firstObject.enabled = true;
-                        }];
-                    }
-                }];
-#endif
-
                 // 1. Clear Caches
                 [actionsBar addItemWithTitle:@"清理缓存"
                                       detail:@"计算中..."
@@ -509,7 +458,7 @@
                                        image:downgradeImage
                                      handler:^{
                     if (self.appData.isApplication && [self.appData hasAppStoreApp]) {
-                        NSInteger itemIndex = 3;
+                        NSInteger itemIndex = 4;
                         UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:@"应用降级"
                                                                                              message:@"请选择降级方式"
                                                                                       preferredStyle:UIAlertControllerStyleAlert];
@@ -660,7 +609,7 @@
                     if (self.appData.isDeletable) {
                         [self showDestructiveConfirmationAlertWithTitle:@"卸载应用" message:@"这将彻底卸载该应用并删除其所有数据。\n此操作不可撤销！"
                                                            confirmTitle:@"卸载" confirmHandler:^{
-                            NSInteger itemIndex = 4;
+                            NSInteger itemIndex = 3;
                             [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
 
                             [self.appData uninstallAppWithCompletion:^(BOOL success) {
@@ -678,6 +627,10 @@
                         }];
                     }
                 }];
+
+                // 将卸载放在降级之前。
+                UIView *uninstallItem = [actionsBar.arrangedSubviews objectAtIndex:4];
+                [actionsBar insertArrangedSubview:uninstallItem atIndex:3];
 
                 // 6. Redirect / per-app launch control (tap and long press use the same menu).
                 UIImage *redirectImage = nil;
@@ -702,15 +655,15 @@
                 }
 
                 if ([self.appData hasAppStoreApp]) {
-                    [actionsBar setItemEnabled:YES atIndex:3];
-                    [actionsBar setDetail:@"版本回退" forItemAtIndex:3];
+                    [actionsBar setItemEnabled:YES atIndex:4];
+                    [actionsBar setDetail:@"版本回退" forItemAtIndex:4];
                 } else {
-                    [actionsBar setItemEnabled:NO atIndex:3];
-                    [actionsBar setDetail:@"非商店应用" forItemAtIndex:3];
+                    [actionsBar setItemEnabled:NO atIndex:4];
+                    [actionsBar setDetail:@"非商店应用" forItemAtIndex:4];
                 }
 
                 if (!self.appData.isDeletable) {
-                    [actionsBar setItemEnabled:NO atIndex:4];
+                    [actionsBar setItemEnabled:NO atIndex:3];
                 }
 
                 [actionsBar showLoadingIndicatorForItemAtIndex:0];
