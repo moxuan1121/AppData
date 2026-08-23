@@ -270,7 +270,8 @@ struct SBIconImageInfo {
 
 - (id)applicationShortcutItems {
     if ([ADSettings forceTouchMenuEnabled]) {
-        NSMutableArray *newItems = [NSMutableArray arrayWithArray:%orig?:@[]];
+        NSArray *originalItems = %orig;
+        NSMutableArray *newItems = [NSMutableArray arrayWithArray:originalItems ?: @[]];
         SBSApplicationShortcutItem *shortcutItem = [ADHelper applicationShortcutItem];
         if (shortcutItem) {
             [newItems insertObject:shortcutItem atIndex:0];
