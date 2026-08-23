@@ -20,6 +20,16 @@
 + (UIImage *)_applicationIconImageForBundleIdentifier:(NSString *)bundleIdentifier format:(NSInteger)format scale:(CGFloat)scale;
 @end
 
+@interface SSAccount : NSObject
+- (BOOL)isActive;
+- (BOOL)isLocalAccount;
+@end
+
+@interface SSAccountStore : NSObject
++ (id)defaultStore;
+- (NSArray *)accounts;
+@end
+
 @interface SKUIItemStateCenter : NSObject
 + (id)defaultCenter;
 - (id)_newPurchasesWithItems:(id)items;
@@ -378,6 +388,25 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
     string = [string stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if (string.length == 0 || string.length > maximumLength) return nil;
     return string;
+}
+
+- (BOOL)downgrade_requireActiveStoreAccount {
+    Class accountStoreClass = objc_getClass("SSAccountStore");
+    if (!accountStoreClass || ![accountStoreClass respondsToSelector:@selector(defaultStore)]) {
+        [self showDowngradeMessage:@"无法读取 App Store 登录状态，请确认已在 App Store 登录后重试。" title:@"无法检查账号"];
+        return NO;
+    }
+
+    SSAccountStore *store = [accountStoreClass defaultStore];
+    for (SSAccount *account in [store accounts]) {
+        if ([account respondsToSelector:@selector(isActive)] && [account isActive] &&
+            (![account respondsToSelector:@selector(isLocalAccount)] || ![account isLocalAccount])) {
+            return YES;
+        }
+    }
+
+    [self showDowngradeMessage:@"当前未登录 App Store 账号，请先登录后再试。" title:@"未登录账号"];
+    return NO;
 }
 
 - (NSArray<NSDictionary *> *)downgrade_candidateRecordsFromJSON:(id)json depth:(NSUInteger)depth {
@@ -852,6 +881,7 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
                                                                                       preferredStyle:UIAlertControllerStyleAlert];
 
                         [actionSheet addAction:[UIAlertAction actionWithTitle:@"从服务器获取" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                            if (![self downgrade_requireActiveStoreAccount]) return;
                             [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
                             [weakActionsBar setDetail:@"查询信息..." forItemAtIndex:itemIndex];
                             [self downgrade_fetchTrackIDWithCompletion:^(long long trackId, NSError *error) {
@@ -890,6 +920,7 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
 
                             [inputAlert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
                             [inputAlert addAction:[UIAlertAction actionWithTitle:@"降级" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+                                if (![self downgrade_requireActiveStoreAccount]) return;
                                 NSString *vidStr = inputAlert.textFields.firstObject.text;
                                 long long versionId = [vidStr longLongValue];
                                 if (versionId <= 0) {
