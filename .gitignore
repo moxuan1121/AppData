@@ -74,3 +74,5 @@ Packages/
 AppData/Package/Library/MobileSubstrate/DynamicLibraries/AppData.dylib
 
 LatestBuild
+__pycache__/
+*.pyc
