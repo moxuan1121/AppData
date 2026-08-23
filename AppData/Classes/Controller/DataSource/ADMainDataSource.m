@@ -71,6 +71,7 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
 @property (nonatomic, strong) UISearchController *searchController;
 @property (nonatomic, strong) NSCache<NSString *, UIImage *> *iconCache;
 - (instancetype)initWithSelectedBundleIdentifiers:(NSArray<NSString *> *)selected excludingBundleIdentifier:(NSString *)excluded completion:(ADAppSelectionCompletion)completion;
+- (NSArray<LSApplicationProxy *> *)applicationsByPrioritizingSelection:(NSArray<LSApplicationProxy *> *)applications;
 @end
 
 @implementation ADAppSelectionViewController
@@ -88,14 +89,24 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
                 return ![app.bundleIdentifier isEqualToString:excluded];
             }]];
         }
-        self.applications = [installed sortedArrayUsingComparator:^NSComparisonResult(LSApplicationProxy *left, LSApplicationProxy *right) {
-            NSString *leftName = left.localizedName ?: left.bundleIdentifier;
-            NSString *rightName = right.localizedName ?: right.bundleIdentifier;
-            return [leftName localizedCaseInsensitiveCompare:rightName];
-        }];
+        self.applications = [self applicationsByPrioritizingSelection:installed];
         self.filteredApplications = self.applications;
     }
     return self;
+}
+
+- (NSArray<LSApplicationProxy *> *)applicationsByPrioritizingSelection:(NSArray<LSApplicationProxy *> *)applications {
+    return [applications sortedArrayUsingComparator:^NSComparisonResult(LSApplicationProxy *left, LSApplicationProxy *right) {
+        BOOL leftSelected = [self.selectedBundleIdentifiers containsObject:left.bundleIdentifier];
+        BOOL rightSelected = [self.selectedBundleIdentifiers containsObject:right.bundleIdentifier];
+        if (leftSelected != rightSelected) return leftSelected ? NSOrderedAscending : NSOrderedDescending;
+
+        NSString *leftName = left.localizedName ?: left.bundleIdentifier;
+        NSString *rightName = right.localizedName ?: right.bundleIdentifier;
+        NSComparisonResult nameResult = [leftName localizedCaseInsensitiveCompare:rightName];
+        if (nameResult != NSOrderedSame) return nameResult;
+        return [left.bundleIdentifier localizedCaseInsensitiveCompare:right.bundleIdentifier];
+    }];
 }
 
 - (void)viewDidLoad {
@@ -188,7 +199,8 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
     } else if (app.bundleIdentifier.length > 0) {
         [self.selectedBundleIdentifiers addObject:app.bundleIdentifier];
     }
-    [tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
+    self.applications = [self applicationsByPrioritizingSelection:self.applications];
+    [self updateSearchResultsForSearchController:self.searchController];
 }
 
 @end
@@ -214,7 +226,7 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
     else if (blocksOutgoing) summary = @"禁止跳出";
     else if (blocksIncoming) summary = @"禁止唤起";
     NSUInteger customCount = [ADSettings customBlockedApplicationsForBundleIdentifier:bundleIdentifier].count;
-    return customCount > 0 ? [NSString stringWithFormat:@"%@ · 指定%tu个", summary, customCount] : summary;
+    return customCount > 0 ? @"启用指定" : summary;
 }
 
 - (void)showCustomBlockedApplicationPickerWithActionsBar:(ADActionsBarView *)actionsBar itemIndex:(NSInteger)itemIndex {
