@@ -11,7 +11,6 @@
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <dlfcn.h>
-#import <limits.h>
 
 #ifndef IS_IPAD
 #define IS_IPAD (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad)
@@ -437,25 +436,6 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
     return [value isKindOfClass:[NSString class]] && [value length] > 0 ? value : nil;
 }
 
-- (NSNumber *)downgrade_purchaserDSID {
-    NSString *bundlePath = self.appData.bundleURL.path;
-    NSString *metadataPath = [[bundlePath stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"iTunesMetadata.plist"];
-    NSDictionary *metadata = [NSDictionary dictionaryWithContentsOfFile:metadataPath];
-    NSDictionary *downloadInfo = [metadata[@"com.apple.iTunesStore.downloadInfo"] isKindOfClass:[NSDictionary class]]
-        ? metadata[@"com.apple.iTunesStore.downloadInfo"] : nil;
-    NSDictionary *accountInfo = [downloadInfo[@"accountInfo"] isKindOfClass:[NSDictionary class]]
-        ? downloadInfo[@"accountInfo"] : nil;
-    for (NSString *key in @[@"PurchaserID", @"DownloaderID", @"DSID", @"dsid"]) {
-        NSString *candidate = [self downgrade_safeStringFromValue:accountInfo[key] maximumLength:20];
-        if (candidate.length == 0) continue;
-        NSCharacterSet *nonDigits = [[NSCharacterSet decimalDigitCharacterSet] invertedSet];
-        if ([candidate rangeOfCharacterFromSet:nonDigits].location != NSNotFound) continue;
-        unsigned long long value = strtoull(candidate.UTF8String, NULL, 10);
-        if (value > 0 && value <= LLONG_MAX) return @(value);
-    }
-    return nil;
-}
-
 - (BOOL)switchStoreAccountTo:(SSAccount *)targetAccount error:(NSError **)error {
     if (!targetAccount) return NO;
     SSAccountStore *store = [objc_getClass("SSAccountStore") defaultStore];
@@ -737,7 +717,7 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
     [center _performPurchases:[center _newPurchasesWithItems:items] hasBundlePurchase:NO withClientContext:[objc_getClass("SKUIClientContext") defaultContext] completionBlock:^(id arg1){}];
 }
 
-- (void)downgrade_installWithTrackID:(long long)trackId versionID:(long long)versionId {
+- (void)_downgrade_installWithTrackID:(long long)trackId versionID:(long long)versionId attempt:(NSUInteger)attempt {
     NSString *adamId = [NSString stringWithFormat:@"%lld", trackId];
     NSString *appExtVrsId = [NSString stringWithFormat:@"%lld", versionId];
     NSString *buyParameters = [NSString stringWithFormat:@"productType=C&price=0&salableAdamId=%@&pricingParameters=pricingParameter&appExtVrsId=%@&clientBuyId=1&installed=0&trolled=1", adamId, appExtVrsId];
@@ -768,23 +748,6 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
             ((void (*)(id, SEL, BOOL))objc_msgSend)(purchase, setIsRedownloadSelector, YES);
         }
 
-        // Pin the daemon request to this app's recorded purchaser. Storefront alone
-        // is insufficient when multiple saved Apple IDs belong to the same country.
-        NSNumber *purchaserDSID = [self downgrade_purchaserDSID];
-        NSDictionary<NSString *, NSNumber *> *purchaseIdentity = @{
-            @"setItemID:": @(trackId),
-            @"setAccountIdentifier:": purchaserDSID ?: (NSNumber *)[NSNull null],
-            @"setPurchaserDSID:": purchaserDSID ?: (NSNumber *)[NSNull null],
-            @"setOwnerDSID:": purchaserDSID ?: (NSNumber *)[NSNull null]
-        };
-        [purchaseIdentity enumerateKeysAndObjectsUsingBlock:^(NSString *selectorName, NSNumber *value, BOOL *stop) {
-            if ((id)value == [NSNull null]) return;
-            SEL selector = NSSelectorFromString(selectorName);
-            if ([purchase respondsToSelector:selector]) {
-                ((void (*)(id, SEL, id))objc_msgSend)(purchase, selector, value);
-            }
-        }];
-
         id manager = nil;
         for (NSString *singletonName in @[@"sharedManager", @"sharedInstance", @"defaultManager"]) {
             SEL singletonSelector = NSSelectorFromString(singletonName);
@@ -804,11 +767,29 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
             // the fallback request silently disappears.
             ADMainDataSource *strongDataSource = self;
             void (^resultHandler)(id, NSError *) = ^(id result, NSError *error) {
-                if (!error) return;
+                NSError *purchaseError = error;
+                BOOL purchaseSucceeded = !error;
+                SEL successSelector = NSSelectorFromString(@"success");
+                SEL errorSelector = NSSelectorFromString(@"error");
+                if (result && [result respondsToSelector:successSelector]) {
+                    purchaseSucceeded = ((BOOL (*)(id, SEL))objc_msgSend)(result, successSelector);
+                }
+                if (!purchaseError && result && [result respondsToSelector:errorSelector]) {
+                    purchaseError = ((id (*)(id, SEL))objc_msgSend)(result, errorSelector);
+                }
+                if (purchaseSucceeded) return;
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    NSLog(@"[AppData Downgrade] AppStoreDaemon rejected request; using StoreKitUI fallback (%@/%ld)",
-                          error.domain ?: @"unknown", (long)error.code);
-                    [strongDataSource _fallback_downgrade_installWithTrackID:trackId versionID:versionId];
+                    NSLog(@"[AppData Downgrade] AppStoreDaemon purchase failed (%@/%ld), attempt %lu",
+                          purchaseError.domain ?: @"unknown", (long)purchaseError.code, (unsigned long)(attempt + 1));
+                    if (attempt == 0) {
+                        id device = [objc_getClass("SSDevice") currentDevice];
+                        if ([device respondsToSelector:@selector(reloadStoreFrontIdentifier)]) [device reloadStoreFrontIdentifier];
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                            [strongDataSource _downgrade_installWithTrackID:trackId versionID:versionId attempt:1];
+                        });
+                    } else {
+                        [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeError];
+                    }
                 });
             };
             ((void (*)(id, SEL, id, id))objc_msgSend)(manager, startSelector, purchase, resultHandler);
@@ -829,6 +810,10 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
         NSLog(@"[AppData Downgrade] AppStoreDaemon invocation failed; using StoreKitUI fallback: %@", exception.reason ?: @"unknown error");
         [self _fallback_downgrade_installWithTrackID:trackId versionID:versionId];
     }
+}
+
+- (void)downgrade_installWithTrackID:(long long)trackId versionID:(long long)versionId {
+    [self _downgrade_installWithTrackID:trackId versionID:versionId attempt:0];
 }
 
 - (void)downgrade_presentVersionSelection:(NSArray *)versions trackID:(long long)trackId {

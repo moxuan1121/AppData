@@ -14,7 +14,7 @@ SOURCE = (
 
 class DaemonDowngradeContractTests(unittest.TestCase):
     def test_appstoredaemon_is_primary_and_storekitui_is_fallback(self):
-        primary = SOURCE.index("- (void)downgrade_installWithTrackID:")
+        primary = SOURCE.index("- (void)_downgrade_installWithTrackID:")
         daemon = SOURCE.index("AppStoreDaemon.framework/AppStoreDaemon", primary)
         fallback_call = SOURCE.index("_fallback_downgrade_installWithTrackID", daemon)
         self.assertLess(daemon, fallback_call)
@@ -52,14 +52,14 @@ class DaemonDowngradeContractTests(unittest.TestCase):
 
     def test_daemon_reply_survives_panel_dismissal(self):
         self.assertIn("ADMainDataSource *strongDataSource = self", SOURCE)
-        self.assertIn("[strongDataSource _fallback_downgrade_installWithTrackID", SOURCE)
+        self.assertIn("[strongDataSource _downgrade_installWithTrackID", SOURCE)
 
-    def test_purchase_is_bound_to_validated_app_purchaser(self):
-        self.assertIn("downgrade_purchaserDSID", SOURCE)
-        self.assertIn('@"PurchaserID", @"DownloaderID", @"DSID", @"dsid"', SOURCE)
-        self.assertIn("decimalDigitCharacterSet", SOURCE)
-        for selector in ("setItemID:", "setAccountIdentifier:", "setPurchaserDSID:", "setOwnerDSID:"):
-            self.assertIn(selector, SOURCE)
+    def test_daemon_result_object_is_checked_and_failed_auth_is_retried(self):
+        self.assertIn('NSSelectorFromString(@"success")', SOURCE)
+        self.assertIn('NSSelectorFromString(@"error")', SOURCE)
+        self.assertIn("if (purchaseSucceeded) return", SOURCE)
+        self.assertIn("attempt:1", SOURCE)
+        self.assertIn("reloadStoreFrontIdentifier", SOURCE)
 
     def test_success_closes_panel_without_started_alert(self):
         self.assertNotIn("已发起降级", SOURCE)
