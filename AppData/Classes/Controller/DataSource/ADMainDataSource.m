@@ -488,6 +488,26 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
     }
 }
 
+- (void)downgrade_writeDiagnosticForError:(NSError *)error
+                                    result:(id)result
+                                   trackID:(long long)trackId
+                                 versionID:(long long)versionId {
+    NSDictionary *diagnostic = @{
+        @"timestamp": @([[NSDate date] timeIntervalSince1970]),
+        @"bundleIdentifier": self.appData.bundleIdentifier ?: @"",
+        @"trackId": @(trackId),
+        @"versionId": @(versionId),
+        @"resultClass": result ? NSStringFromClass([result class]) : @"",
+        @"errorDomain": error.domain ?: @"",
+        @"errorCode": @(error.code),
+        @"channel": @"AppStoreDaemon"
+    };
+    NSString *path = @"/var/mobile/Library/Preferences/com.moxuan.appdata.downgrade-diagnostic.plist";
+    if (![diagnostic writeToFile:path atomically:YES]) {
+        NSLog(@"[AppData Downgrade] unable to write sanitized diagnostic");
+    }
+}
+
 - (void)downgrade_verifyOwnershipWithCompletion:(void(^)(BOOL success))completion {
     if (![self downgrade_requireActiveStoreAccount]) {
         if (completion) completion(NO);
@@ -807,16 +827,12 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
                 dispatch_async(dispatch_get_main_queue(), ^{
                     NSLog(@"[AppData Downgrade] AppStoreDaemon purchase failed (%@/%ld), attempt %lu",
                           purchaseError.domain ?: @"unknown", (long)purchaseError.code, (unsigned long)(attempt + 1));
-                    if (attempt == 0) {
-                        id device = [objc_getClass("SSDevice") currentDevice];
-                        if ([device respondsToSelector:@selector(reloadStoreFrontIdentifier)]) [device reloadStoreFrontIdentifier];
-                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                            [strongDataSource _downgrade_installWithTrackID:trackId versionID:versionId attempt:1];
-                        });
-                    } else {
-                        [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeError];
-                        [strongDataSource downgrade_restoreOriginalStoreAccount];
-                    }
+                    [strongDataSource downgrade_writeDiagnosticForError:purchaseError
+                                                                  result:result
+                                                                 trackID:trackId
+                                                               versionID:versionId];
+                    [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeError];
+                    [strongDataSource downgrade_restoreOriginalStoreAccount];
                 });
             };
             ((void (*)(id, SEL, id, id))objc_msgSend)(manager, startSelector, purchase, resultHandler);

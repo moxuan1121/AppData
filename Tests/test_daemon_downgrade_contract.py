@@ -55,14 +55,17 @@ class DaemonDowngradeContractTests(unittest.TestCase):
 
     def test_daemon_reply_survives_panel_dismissal(self):
         self.assertIn("ADMainDataSource *strongDataSource = self", SOURCE)
-        self.assertIn("[strongDataSource _downgrade_installWithTrackID", SOURCE)
+        self.assertIn("[strongDataSource downgrade_writeDiagnosticForError", SOURCE)
 
-    def test_daemon_result_object_is_checked_and_failed_auth_is_retried(self):
+    def test_daemon_result_object_is_checked_without_password_retry_loop(self):
         self.assertIn('NSSelectorFromString(@"success")', SOURCE)
         self.assertIn('NSSelectorFromString(@"error")', SOURCE)
         self.assertIn("if (purchaseSucceeded) {", SOURCE)
-        self.assertIn("attempt:1", SOURCE)
-        self.assertIn("reloadStoreFrontIdentifier", SOURCE)
+        self.assertNotIn("attempt:1", SOURCE)
+        self.assertIn("downgrade_writeDiagnosticForError", SOURCE)
+        self.assertIn("com.moxuan.appdata.downgrade-diagnostic.plist", SOURCE)
+        for forbidden in ("password", "token", "cookie", "DSID"):
+            self.assertNotIn('@"' + forbidden + '"', SOURCE)
 
     def test_store_switch_is_automatic_and_original_store_is_restored(self):
         self.assertNotIn('alertControllerWithTitle:@"需要切换账号"', SOURCE)
