@@ -63,6 +63,8 @@
 
 typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIdentifiers);
 static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStoreAccountKey;
+static const void *ADDowngradeInitialVersionKey = &ADDowngradeInitialVersionKey;
+static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonitorTokenKey;
 
 @interface ADAppSelectionViewController : UITableViewController <UISearchResultsUpdating>
 @property (nonatomic, copy) NSArray<LSApplicationProxy *> *applications;
@@ -433,8 +435,22 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
     NSString *bundlePath = self.appData.bundleURL.path;
     NSString *metadataPath = [[bundlePath stringByDeletingLastPathComponent] stringByAppendingPathComponent:@"iTunesMetadata.plist"];
     NSDictionary *metadata = [NSDictionary dictionaryWithContentsOfFile:metadataPath];
-    id value = metadata[@"com.apple.iTunesStore.downloadInfo"][@"accountInfo"][@"AppleID"];
-    return [value isKindOfClass:[NSString class]] && [value length] > 0 ? value : nil;
+    NSDictionary *downloadInfo = [metadata[@"com.apple.iTunesStore.downloadInfo"] isKindOfClass:[NSDictionary class]]
+        ? metadata[@"com.apple.iTunesStore.downloadInfo"] : nil;
+    NSDictionary *accountInfo = [downloadInfo[@"accountInfo"] isKindOfClass:[NSDictionary class]]
+        ? downloadInfo[@"accountInfo"] : nil;
+    NSArray *candidates = @[
+        accountInfo[@"AppleID"] ?: [NSNull null],
+        accountInfo[@"appleId"] ?: [NSNull null],
+        accountInfo[@"accountName"] ?: [NSNull null],
+        metadata[@"purchaserAccount"] ?: [NSNull null],
+        metadata[@"com.apple.iTunesStore.purchaserAccount"] ?: [NSNull null]
+    ];
+    for (id value in candidates) {
+        NSString *name = [self downgrade_safeStringFromValue:value maximumLength:320];
+        if (name.length > 0) return name;
+    }
+    return nil;
 }
 
 - (BOOL)switchStoreAccountTo:(SSAccount *)targetAccount error:(NSError **)error {
@@ -468,11 +484,125 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
     SSAccount *originalAccount = objc_getAssociatedObject(self, ADDowngradeOriginalStoreAccountKey);
     if (!originalAccount) return;
     objc_setAssociatedObject(self, ADDowngradeOriginalStoreAccountKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(self, ADDowngradeInitialVersionKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(self, ADDowngradeRestoreMonitorTokenKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     NSError *restoreError = nil;
     if (![self switchStoreAccountTo:originalAccount error:&restoreError]) {
         NSLog(@"[AppData Downgrade] failed to restore original storefront (%@/%ld)",
               restoreError.domain ?: @"unknown", (long)restoreError.code);
     }
+}
+
+- (NSString *)downgrade_installedVersionSignatureForBundleIdentifier:(NSString *)bundleIdentifier {
+    if (bundleIdentifier.length == 0) return nil;
+    LSApplicationProxy *proxy = [LSApplicationProxy applicationProxyForIdentifier:bundleIdentifier];
+    if (!proxy) return nil;
+    NSString *shortVersion = [proxy.shortVersionString isKindOfClass:[NSString class]] ? proxy.shortVersionString : @"";
+    NSString *bundleVersion = [proxy.bundleVersion isKindOfClass:[NSString class]] ? proxy.bundleVersion : @"";
+    if (shortVersion.length == 0 && bundleVersion.length == 0) return nil;
+    return [NSString stringWithFormat:@"%@|%@", shortVersion, bundleVersion];
+}
+
+- (void)downgrade_pollForInstalledVersionChangeWithToken:(NSString *)token
+                                        bundleIdentifier:(NSString *)bundleIdentifier
+                                                deadline:(NSDate *)deadline {
+    NSString *activeToken = objc_getAssociatedObject(self, ADDowngradeRestoreMonitorTokenKey);
+    if (![activeToken isEqualToString:token] || !objc_getAssociatedObject(self, ADDowngradeOriginalStoreAccountKey)) return;
+
+    NSString *initialVersion = objc_getAssociatedObject(self, ADDowngradeInitialVersionKey);
+    NSString *installedVersion = [self downgrade_installedVersionSignatureForBundleIdentifier:bundleIdentifier];
+    BOOL versionChanged = initialVersion.length > 0 && installedVersion.length > 0 &&
+        ![installedVersion isEqualToString:initialVersion];
+    if (versionChanged) {
+        // The LaunchServices version only changes after the replacement is committed.
+        // Give appstored/installcoordination another 30 seconds to finish bookkeeping
+        // before returning to the previous storefront.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            NSString *latestToken = objc_getAssociatedObject(self, ADDowngradeRestoreMonitorTokenKey);
+            if ([latestToken isEqualToString:token]) {
+                NSLog(@"[AppData Downgrade] installed version changed from %@ to %@; restoring original storefront",
+                      initialVersion, installedVersion);
+                [self downgrade_restoreOriginalStoreAccount];
+            }
+        });
+        return;
+    }
+
+    if ([[NSDate date] compare:deadline] != NSOrderedAscending) {
+        NSLog(@"[AppData Downgrade] conservative storefront restore timeout reached");
+        [self downgrade_restoreOriginalStoreAccount];
+        return;
+    }
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 8 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        [self downgrade_pollForInstalledVersionChangeWithToken:token bundleIdentifier:bundleIdentifier deadline:deadline];
+    });
+}
+
+- (void)downgrade_beginConservativeStoreRestoreMonitoring {
+    if (!objc_getAssociatedObject(self, ADDowngradeOriginalStoreAccountKey)) return;
+    if (objc_getAssociatedObject(self, ADDowngradeRestoreMonitorTokenKey)) return;
+    NSString *bundleIdentifier = self.appData.bundleIdentifier;
+    if (bundleIdentifier.length == 0) return;
+
+    NSString *token = [NSUUID UUID].UUIDString;
+    objc_setAssociatedObject(self, ADDowngradeRestoreMonitorTokenKey, token, OBJC_ASSOCIATION_COPY_NONATOMIC);
+    // Downgrade correctness wins over switching speed. Two hours is only a safety
+    // valve for a request that never creates or finishes an installation job.
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:2 * 60 * 60];
+    [self downgrade_pollForInstalledVersionChangeWithToken:token bundleIdentifier:bundleIdentifier deadline:deadline];
+}
+
+- (void)downgrade_switchToAccount:(SSAccount *)account
+                    originalAccount:(SSAccount *)originalAccount
+                         completion:(void(^)(BOOL success))completion {
+    if (!account) {
+        if (completion) completion(NO);
+        return;
+    }
+    if (account != originalAccount) {
+        objc_setAssociatedObject(self, ADDowngradeOriginalStoreAccountKey, originalAccount, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    [self switchStoreAccountTo:account error:nil];
+    // AppData 2.3.0 waits 0.5 seconds after activating the saved SSAccount.
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        if (completion) completion(YES);
+    });
+}
+
+- (void)downgrade_presentSavedAccountSelectionWithMessage:(NSString *)message
+                                             activeAccount:(SSAccount *)activeAccount
+                                                completion:(void(^)(BOOL success))completion {
+    SSAccountStore *store = [objc_getClass("SSAccountStore") defaultStore];
+    NSMutableArray<SSAccount *> *accounts = [NSMutableArray array];
+    for (SSAccount *account in [store accounts]) {
+        if (![account isLocalAccount] && [account accountName].length > 0) [accounts addObject:account];
+    }
+    if (accounts.count == 0) {
+        [self showDowngradeMessage:@"设备中没有可用于验证购买记录的 App Store 账号。" title:@"无法验证购买账号"];
+        if (completion) completion(NO);
+        return;
+    }
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"选择购买账号"
+                                                                    message:message
+                                                             preferredStyle:UIAlertControllerStyleActionSheet];
+    for (SSAccount *account in accounts) {
+        NSString *name = [account accountName];
+        [alert addAction:[UIAlertAction actionWithTitle:name style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            [self downgrade_switchToAccount:account originalAccount:activeAccount completion:completion];
+        }]];
+    }
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(__unused UIAlertAction *action) {
+        if (completion) completion(NO);
+    }]];
+    if (IS_IPAD && alert.popoverPresentationController) {
+        alert.popoverPresentationController.sourceView = self.dataViewController.view;
+        alert.popoverPresentationController.sourceRect = CGRectMake(self.dataViewController.view.bounds.size.width / 2.0,
+                                                                    self.dataViewController.view.bounds.size.height / 2.0, 1, 1);
+        alert.popoverPresentationController.permittedArrowDirections = 0;
+    }
+    [self.dataViewController presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)downgrade_writeDiagnosticForError:(NSError *)error
@@ -505,8 +635,15 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
     SSAccount *activeAccount = [self downgrade_activeStoreAccountFromStore:store];
     NSString *activeName = [activeAccount accountName];
     NSString *purchaserName = [self downgrade_purchaserAccountName];
-    if (purchaserName.length == 0 || [activeName caseInsensitiveCompare:purchaserName] == NSOrderedSame) {
+    if (purchaserName.length > 0 && [activeName caseInsensitiveCompare:purchaserName] == NSOrderedSame) {
         if (completion) completion(YES);
+        return;
+    }
+
+    if (purchaserName.length == 0) {
+        [self downgrade_presentSavedAccountSelectionWithMessage:@"无法从应用元数据自动确认购买账号。请选择最初获取该应用的账号；不会要求 AppData 保存密码。"
+                                                   activeAccount:activeAccount
+                                                      completion:completion];
         return;
     }
 
@@ -519,25 +656,11 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
     }
 
     if (!purchaserAccount) {
-        [self showDowngradeMessage:@"设备中没有保存该购买账号，请先在 App Store 登录该账号。" title:@"无法切换"];
-        if (completion) completion(NO);
+        NSString *message = [NSString stringWithFormat:@"应用记录的购买账号为 %@，但设备中没有完全匹配的账号。请选择正确的已保存账号。", purchaserName];
+        [self downgrade_presentSavedAccountSelectionWithMessage:message activeAccount:activeAccount completion:completion];
         return;
     }
-
-    objc_setAssociatedObject(self, ADDowngradeOriginalStoreAccountKey, activeAccount, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    NSError *switchError = nil;
-    if (![self switchStoreAccountTo:purchaserAccount error:&switchError]) {
-        objc_setAssociatedObject(self, ADDowngradeOriginalStoreAccountKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        NSLog(@"[AppData Downgrade] automatic account switch failed (%@/%ld)",
-              switchError.domain ?: @"unknown", (long)switchError.code);
-        [self showDowngradeMessage:@"账号自动切换失败，请确认购买账号仍保存在设备中。" title:@"切换失败"];
-        if (completion) completion(NO);
-        return;
-    }
-
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.75 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-        if (completion) completion(YES);
-    });
+    [self downgrade_switchToAccount:purchaserAccount originalAccount:activeAccount completion:completion];
 }
 
 - (NSArray<NSDictionary *> *)downgrade_candidateRecordsFromJSON:(id)json depth:(NSUInteger)depth {
@@ -706,6 +829,7 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
         !objc_getClass("SKUIItemStateCenter") || !objc_getClass("SKUIClientContext")) {
         NSLog(@"[AppData Downgrade] StoreKitUI fallback is unavailable");
         [self showDowngradeMessage:@"当前系统不支持降级下载通道。" title:@"提交失败"];
+        [self downgrade_restoreOriginalStoreAccount];
         return;
     }
 
@@ -727,10 +851,13 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
 
     ADMainDataSource *strongDataSource = self;
     [center _performPurchases:[center _newPurchasesWithItems:items] hasBundlePurchase:NO withClientContext:[objc_getClass("SKUIClientContext") defaultContext] completionBlock:^(id arg1){
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [strongDataSource downgrade_restoreOriginalStoreAccount];
-        });
+        // This callback means the purchase pipeline replied, not that installation
+        // finished. The version monitor restores the storefront only after the
+        // replacement is committed (or the conservative safety timeout expires).
+        (void)arg1;
+        [strongDataSource downgrade_beginConservativeStoreRestoreMonitoring];
     }];
+    [self downgrade_beginConservativeStoreRestoreMonitoring];
 }
 
 - (void)_downgrade_installWithTrackID:(long long)trackId versionID:(long long)versionId {
@@ -812,7 +939,7 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
                 }
                 if (purchaseSucceeded) {
                     dispatch_async(dispatch_get_main_queue(), ^{
-                        [strongDataSource downgrade_restoreOriginalStoreAccount];
+                        [strongDataSource downgrade_beginConservativeStoreRestoreMonitoring];
                     });
                     return;
                 }
@@ -827,6 +954,7 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
                 });
             };
             ((void (*)(id, SEL, id, id))objc_msgSend)(manager, startSelector, purchase, resultHandler);
+            [self downgrade_beginConservativeStoreRestoreMonitoring];
             NSLog(@"[AppData Downgrade] submitted through AppStoreDaemon");
             return;
         }
@@ -839,6 +967,9 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
 }
 
 - (void)downgrade_installWithTrackID:(long long)trackId versionID:(long long)versionId {
+    NSString *initialVersion = [self downgrade_installedVersionSignatureForBundleIdentifier:self.appData.bundleIdentifier];
+    objc_setAssociatedObject(self, ADDowngradeInitialVersionKey, initialVersion, OBJC_ASSOCIATION_COPY_NONATOMIC);
+    objc_setAssociatedObject(self, ADDowngradeRestoreMonitorTokenKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [self _downgrade_installWithTrackID:trackId versionID:versionId];
 }
 

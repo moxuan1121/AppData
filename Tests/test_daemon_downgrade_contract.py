@@ -76,7 +76,31 @@ class DaemonDowngradeContractTests(unittest.TestCase):
         self.assertNotIn('actionWithTitle:@"切换并继续"', SOURCE)
         self.assertIn("ADDowngradeOriginalStoreAccountKey", SOURCE)
         self.assertIn("downgrade_restoreOriginalStoreAccount", SOURCE)
-        self.assertGreaterEqual(SOURCE.count("[strongDataSource downgrade_restoreOriginalStoreAccount]"), 2)
+        self.assertIn("downgrade_beginConservativeStoreRestoreMonitoring", SOURCE)
+        self.assertIn("downgrade_installedVersionSignatureForBundleIdentifier", SOURCE)
+        self.assertIn("2 * 60 * 60", SOURCE)
+        self.assertIn("30 * NSEC_PER_SEC", SOURCE)
+
+    def test_purchase_callbacks_do_not_restore_storefront_early(self):
+        fallback_start = SOURCE.index("- (void)_fallback_downgrade_installWithTrackID:")
+        primary_start = SOURCE.index("- (void)_downgrade_installWithTrackID:")
+        fallback_body = SOURCE[fallback_start:primary_start]
+        primary_body = SOURCE[primary_start:SOURCE.index("- (void)downgrade_installWithTrackID:", primary_start)]
+        self.assertNotIn("[strongDataSource downgrade_restoreOriginalStoreAccount]", fallback_body)
+        self.assertNotIn("[strongDataSource downgrade_restoreOriginalStoreAccount]", primary_body)
+        self.assertIn("replacement is committed", fallback_body)
+
+    def test_unknown_purchaser_never_silently_uses_current_account(self):
+        ownership = SOURCE.index("- (void)downgrade_verifyOwnershipWithCompletion:")
+        history = SOURCE.index("- (NSArray<NSDictionary *> *)downgrade_candidateRecordsFromJSON:", ownership)
+        body = SOURCE[ownership:history]
+        self.assertNotIn("purchaserName.length == 0 ||", body)
+        self.assertIn("downgrade_presentSavedAccountSelectionWithMessage", body)
+        self.assertIn("无法从应用元数据自动确认购买账号", body)
+
+    def test_original_account_switch_timing_is_preserved(self):
+        self.assertIn("saveAccount:targetAccount verifyCredentials:NO error:nil", SOURCE)
+        self.assertIn("0.5 * NSEC_PER_SEC", SOURCE)
 
     def test_daemon_error_follows_original_storekitui_fallback(self):
         failure = SOURCE.index("AppStoreDaemon purchase failed")
