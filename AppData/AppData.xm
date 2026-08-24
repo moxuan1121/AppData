@@ -6,6 +6,14 @@
 - (void)ad_updateSwipeGestureAvailability;
 @end
 
+@interface SBIconView (AppDataSwipe)
+@property (nonatomic, retain) UISwipeGestureRecognizer *adAppDataSwipeGestureRecognizer;
+- (BOOL)ad_isSupportedIcon;
+- (void)ad_updateAppDataSwipeGestureAvailability;
+- (void)ad_appDataSwipePreferenceChanged:(NSNotification *)notification;
+- (void)ad_handleAppDataSwipeUp:(UISwipeGestureRecognizer *)gesture;
+@end
+
 @interface SBMainWorkspace : NSObject
 @end
 
