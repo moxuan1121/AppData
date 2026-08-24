@@ -61,19 +61,6 @@
 - (id)applicationController;
 @end
 
-@interface ASDNotificationCenter : NSObject
-+ (id)defaultCenter;
-- (void)setDialogObserver:(id)observer;
-@end
-
-@interface SKClientBroker : NSObject
-+ (id)defaultBroker;
-@end
-
-@interface SKPaymentQueue : NSObject
-+ (id)defaultQueue;
-@end
-
 typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIdentifiers);
 static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStoreAccountKey;
 
@@ -453,26 +440,13 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
 - (BOOL)switchStoreAccountTo:(SSAccount *)targetAccount error:(NSError **)error {
     if (!targetAccount) return NO;
     SSAccountStore *store = [objc_getClass("SSAccountStore") defaultStore];
-    NSArray *accounts = [store accounts];
-    SSAccount *previousAccount = [self downgrade_activeStoreAccountFromStore:store];
-    for (SSAccount *account in accounts) {
-        [account setActive:(account == targetAccount)];
-    }
-
-    // StoreSwitcher-style switching reuses the authorization token already carried
-    // by this saved account. Asking StoreServices to verify here produces asymmetric
-    // password prompts when the iCloud storefront and target storefront differ.
-    // AppData never receives or stores an Apple ID password.
-    BOOL saved = [store saveAccount:targetAccount verifyCredentials:NO error:error];
-    if (!saved || (error && *error)) {
-        for (SSAccount *account in accounts) {
-            [account setActive:(account == previousAccount)];
-        }
-        if (previousAccount) {
-            [store saveAccount:previousAccount verifyCredentials:NO error:nil];
-        }
-        return NO;
-    }
+    // Match AppData 2.3.0 exactly: activate the saved account and reuse its
+    // StoreServices credential without forcing synchronous verification. Some iOS
+    // versions return a transient save error even though the storefront switched;
+    // treating that value as terminal caused false "switch failed" results.
+    [targetAccount setActive:YES];
+    [store saveAccount:targetAccount verifyCredentials:NO error:nil];
+    if (error) *error = nil;
 
     NSString *accountName = [targetAccount accountName];
     if (accountName.length > 0) {
@@ -519,42 +493,6 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
     if (![diagnostic writeToFile:path atomically:YES]) {
         NSLog(@"[AppData Downgrade] unable to write sanitized diagnostic");
     }
-}
-
-- (void)downgrade_configureAppStoreDialogObserver {
-    dlopen("/System/Library/Frameworks/StoreKit.framework/StoreKit", RTLD_LAZY | RTLD_LOCAL);
-    // Initializing the default payment queue registers StoreKit's real dialog
-    // client with SKClientBroker. The broker, not SKUIClientContext, implements
-    // ASDNotificationCenterDialogObserver on iOS.
-    Class paymentQueueClass = objc_getClass("SKPaymentQueue");
-    if ([paymentQueueClass respondsToSelector:@selector(defaultQueue)]) {
-        [paymentQueueClass defaultQueue];
-    }
-    Class brokerClass = objc_getClass("SKClientBroker");
-    id observer = [brokerClass respondsToSelector:@selector(defaultBroker)]
-        ? [brokerClass defaultBroker] : nil;
-    SEL authenticateSelector = NSSelectorFromString(@"handleAuthenticateRequest:resultHandler:");
-    SEL dialogSelector = NSSelectorFromString(@"handleDialogRequest:resultHandler:");
-    Class notificationCenterClass = objc_getClass("ASDNotificationCenter");
-    if (observer && [observer respondsToSelector:authenticateSelector] &&
-        [observer respondsToSelector:dialogSelector] &&
-        [notificationCenterClass respondsToSelector:@selector(defaultCenter)]) {
-        id center = [notificationCenterClass defaultCenter];
-        if ([center respondsToSelector:@selector(setDialogObserver:)]) {
-            [center setDialogObserver:observer];
-        }
-    }
-}
-
-- (NSString *)downgrade_foregroundSceneIdentifier {
-    if (@available(iOS 13.0, *)) {
-        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-            if (scene.activationState != UISceneActivationStateForegroundActive) continue;
-            NSString *identifier = scene.session.persistentIdentifier;
-            if ([identifier isKindOfClass:[NSString class]] && identifier.length > 0) return identifier;
-        }
-    }
-    return nil;
 }
 
 - (void)downgrade_verifyOwnershipWithCompletion:(void(^)(BOOL success))completion {
@@ -795,7 +733,7 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
     }];
 }
 
-- (void)_downgrade_installWithTrackID:(long long)trackId versionID:(long long)versionId attempt:(NSUInteger)attempt {
+- (void)_downgrade_installWithTrackID:(long long)trackId versionID:(long long)versionId {
     NSString *adamId = [NSString stringWithFormat:@"%lld", trackId];
     NSString *appExtVrsId = [NSString stringWithFormat:@"%lld", versionId];
     NSString *buyParameters = [NSString stringWithFormat:@"productType=C&price=0&salableAdamId=%@&pricingParameters=pricingParameter&appExtVrsId=%@&clientBuyId=1&installed=0&trolled=1", adamId, appExtVrsId];
@@ -815,52 +753,51 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
     }
 
     @try {
-        [self downgrade_configureAppStoreDialogObserver];
         id purchase = [[purchaseClass alloc] init];
         SEL setBuyParametersSelector = NSSelectorFromString(@"setBuyParameters:");
-        SEL setIsRedownloadSelector = NSSelectorFromString(@"setIsRedownload:");
         if (!purchase || ![purchase respondsToSelector:setBuyParametersSelector]) {
             @throw [NSException exceptionWithName:@"AppDataASDPurchaseUnavailable" reason:@"ASDPurchase does not accept buy parameters" userInfo:nil];
         }
-        ((void (*)(id, SEL, id))objc_msgSend)(purchase, setBuyParametersSelector, buyParameters);
-        if ([purchase respondsToSelector:setIsRedownloadSelector]) {
-            ((void (*)(id, SEL, BOOL))objc_msgSend)(purchase, setIsRedownloadSelector, YES);
-        }
+        NSString *bundleIdentifier = self.appData.bundleIdentifier;
         SEL setItemIDSelector = NSSelectorFromString(@"setItemID:");
+        SEL setBundleIDSelector = NSSelectorFromString(@"setBundleID:");
         if ([purchase respondsToSelector:setItemIDSelector]) {
             ((void (*)(id, SEL, id))objc_msgSend)(purchase, setItemIDSelector, @(trackId));
+        }
+        if (bundleIdentifier.length > 0 && [purchase respondsToSelector:setBundleIDSelector]) {
+            ((void (*)(id, SEL, id))objc_msgSend)(purchase, setBundleIDSelector, bundleIdentifier);
+        }
+        ((void (*)(id, SEL, id))objc_msgSend)(purchase, setBuyParametersSelector, buyParameters);
+        SEL setIsUpdateSelector = NSSelectorFromString(@"setIsUpdate:");
+        if ([purchase respondsToSelector:setIsUpdateSelector]) {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(purchase, setIsUpdateSelector, YES);
+        }
+        SEL setIsBackgroundUpdateSelector = NSSelectorFromString(@"setIsBackgroundUpdate:");
+        if ([purchase respondsToSelector:setIsBackgroundUpdateSelector]) {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(purchase, setIsBackgroundUpdateSelector, NO);
+        }
+        SEL setIsRedownloadSelector = NSSelectorFromString(@"setIsRedownload:");
+        if ([purchase respondsToSelector:setIsRedownloadSelector]) {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(purchase, setIsRedownloadSelector, YES);
         }
         SEL setCreatesJobsSelector = NSSelectorFromString(@"setCreatesJobs:");
         if ([purchase respondsToSelector:setCreatesJobsSelector]) {
             ((void (*)(id, SEL, BOOL))objc_msgSend)(purchase, setCreatesJobsSelector, YES);
         }
-        SEL cancelInstalledSelector = NSSelectorFromString(@"setShouldCancelForInstalledBundleItems:");
-        if ([purchase respondsToSelector:cancelInstalledSelector]) {
-            ((void (*)(id, SEL, BOOL))objc_msgSend)(purchase, cancelInstalledSelector, NO);
-        }
-        NSString *sceneIdentifier = [self downgrade_foregroundSceneIdentifier];
-        SEL sceneSelector = NSSelectorFromString(@"setPresentingSceneIdentifier:");
-        if (sceneIdentifier.length > 0 && [purchase respondsToSelector:sceneSelector]) {
-            ((void (*)(id, SEL, id))objc_msgSend)(purchase, sceneSelector, sceneIdentifier);
+        SEL displaysOnLockScreenSelector = NSSelectorFromString(@"setDisplaysOnLockScreen:");
+        if ([purchase respondsToSelector:displaysOnLockScreenSelector]) {
+            ((void (*)(id, SEL, BOOL))objc_msgSend)(purchase, displaysOnLockScreenSelector, YES);
         }
 
-        id manager = nil;
-        for (NSString *singletonName in @[@"sharedManager", @"sharedInstance", @"defaultManager"]) {
-            SEL singletonSelector = NSSelectorFromString(singletonName);
-            if ([managerClass respondsToSelector:singletonSelector]) {
-                manager = ((id (*)(id, SEL))objc_msgSend)(managerClass, singletonSelector);
-                if (manager) break;
-            }
-        }
+        SEL sharedManagerSelector = NSSelectorFromString(@"sharedManager");
+        id manager = [managerClass respondsToSelector:sharedManagerSelector]
+            ? ((id (*)(id, SEL))objc_msgSend)(managerClass, sharedManagerSelector) : nil;
         if (!manager) {
             @throw [NSException exceptionWithName:@"AppDataASDManagerUnavailable" reason:@"ASDPurchaseManager singleton is unavailable" userInfo:nil];
         }
 
         SEL startSelector = NSSelectorFromString(@"startPurchase:withResultHandler:");
         if ([manager respondsToSelector:startSelector]) {
-            // Keep the data source alive after its panel is dismissed. Otherwise an
-            // authentication/error reply can arrive after weakSelf has become nil and
-            // the fallback request silently disappears.
             ADMainDataSource *strongDataSource = self;
             void (^resultHandler)(id, NSError *) = ^(id result, NSError *error) {
                 NSError *purchaseError = error;
@@ -880,31 +817,17 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
                     return;
                 }
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    NSLog(@"[AppData Downgrade] AppStoreDaemon purchase failed (%@/%ld), attempt %lu",
-                          purchaseError.domain ?: @"unknown", (long)purchaseError.code, (unsigned long)(attempt + 1));
+                    NSLog(@"[AppData Downgrade] AppStoreDaemon purchase failed (%@/%ld); using original StoreKitUI fallback",
+                          purchaseError.domain ?: @"unknown", (long)purchaseError.code);
                     [strongDataSource downgrade_writeDiagnosticForError:purchaseError
                                                                   result:result
                                                                  trackID:trackId
                                                                versionID:versionId];
-                    [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeError];
-                    [strongDataSource downgrade_restoreOriginalStoreAccount];
+                    [strongDataSource _fallback_downgrade_installWithTrackID:trackId versionID:versionId];
                 });
             };
             ((void (*)(id, SEL, id, id))objc_msgSend)(manager, startSelector, purchase, resultHandler);
             NSLog(@"[AppData Downgrade] submitted through AppStoreDaemon");
-            return;
-        }
-
-        SEL performSelector = NSSelectorFromString(@"_performPurchases:hasBundlePurchase:withClientContext:completionBlock:");
-        if ([manager respondsToSelector:performSelector]) {
-            id context = [objc_getClass("SKUIClientContext") defaultContext];
-            ADMainDataSource *strongDataSource = self;
-            ((void (*)(id, SEL, id, BOOL, id, id))objc_msgSend)(manager, performSelector, @[purchase], NO, context, ^(id result) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [strongDataSource downgrade_restoreOriginalStoreAccount];
-                });
-            });
-            NSLog(@"[AppData Downgrade] submitted through AppStoreDaemon purchase manager");
             return;
         }
 
@@ -916,7 +839,7 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
 }
 
 - (void)downgrade_installWithTrackID:(long long)trackId versionID:(long long)versionId {
-    [self _downgrade_installWithTrackID:trackId versionID:versionId attempt:0];
+    [self _downgrade_installWithTrackID:trackId versionID:versionId];
 }
 
 - (void)downgrade_presentVersionSelection:(NSArray *)versions trackID:(long long)trackId {

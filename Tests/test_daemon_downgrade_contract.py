@@ -26,8 +26,11 @@ class DaemonDowngradeContractTests(unittest.TestCase):
             "setBuyParameters:",
             "setIsRedownload:",
             "setItemID:",
+            "setBundleID:",
+            "setIsUpdate:",
+            "setIsBackgroundUpdate:",
             "setCreatesJobs:",
-            "setShouldCancelForInstalledBundleItems:",
+            "setDisplaysOnLockScreen:",
             "appExtVrsId=%@",
             "installed=0",
         ):
@@ -47,7 +50,8 @@ class DaemonDowngradeContractTests(unittest.TestCase):
         self.assertLess(saved_switch, switch_marker)
         self.assertLess(switch_marker, resume)
         self.assertNotIn("saveAccount:targetAccount verifyCredentials:YES", SOURCE)
-        self.assertIn("saveAccount:previousAccount verifyCredentials:NO", SOURCE)
+        self.assertIn("[targetAccount setActive:YES]", SOURCE)
+        self.assertNotIn("setActive:(account == targetAccount)", SOURCE)
         self.assertIn("com.storeswitcher.active.txt", SOURCE)
         self.assertIn("com.storeswitcher.accounts_changed", SOURCE)
         self.assertNotIn("setPassword", SOURCE)
@@ -72,18 +76,22 @@ class DaemonDowngradeContractTests(unittest.TestCase):
         self.assertNotIn('actionWithTitle:@"切换并继续"', SOURCE)
         self.assertIn("ADDowngradeOriginalStoreAccountKey", SOURCE)
         self.assertIn("downgrade_restoreOriginalStoreAccount", SOURCE)
-        self.assertGreaterEqual(SOURCE.count("[strongDataSource downgrade_restoreOriginalStoreAccount]"), 3)
+        self.assertGreaterEqual(SOURCE.count("[strongDataSource downgrade_restoreOriginalStoreAccount]"), 2)
 
-    def test_appstoredaemon_has_dialog_observer_and_presenting_scene(self):
-        self.assertIn("ASDNotificationCenter", SOURCE)
-        self.assertIn("SKClientBroker", SOURCE)
-        self.assertIn("SKPaymentQueue", SOURCE)
-        self.assertIn("defaultQueue", SOURCE)
-        self.assertIn("defaultBroker", SOURCE)
-        self.assertIn("setDialogObserver:", SOURCE)
-        self.assertIn("handleAuthenticateRequest:resultHandler:", SOURCE)
-        self.assertIn("setPresentingSceneIdentifier:", SOURCE)
-        self.assertIn("UISceneActivationStateForegroundActive", SOURCE)
+    def test_daemon_error_follows_original_storekitui_fallback(self):
+        failure = SOURCE.index("AppStoreDaemon purchase failed")
+        fallback = SOURCE.index("[strongDataSource _fallback_downgrade_installWithTrackID", failure)
+        self.assertLess(failure, fallback)
+        self.assertNotIn("downgrade_configureAppStoreDialogObserver", SOURCE)
+        self.assertNotIn("setPresentingSceneIdentifier:", SOURCE)
+        self.assertNotIn("setShouldCancelForInstalledBundleItems:", SOURCE)
+
+    def test_three_history_id_sources_remain_unchanged(self):
+        timbrd = SOURCE.index("https://api.timbrd.com/apple/app-version/index.php?id=%@")
+        agzy = SOURCE.index("https://app.agzy.cn/searchVersion?appid=%@")
+        bilin = SOURCE.index("https://apis.bilin.eu.org/history/%@")
+        self.assertLess(timbrd, agzy)
+        self.assertLess(agzy, bilin)
 
     def test_success_closes_panel_without_started_alert(self):
         self.assertNotIn("已发起降级", SOURCE)
