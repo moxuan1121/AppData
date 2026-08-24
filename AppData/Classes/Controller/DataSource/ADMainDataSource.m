@@ -70,7 +70,7 @@
 + (id)defaultBroker;
 @end
 
-@interface SKPaymentQueue (ADDialogObserverBootstrap)
+@interface SKPaymentQueue : NSObject
 + (id)defaultQueue;
 @end
 
