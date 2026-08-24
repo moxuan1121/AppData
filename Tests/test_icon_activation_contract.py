@@ -39,6 +39,19 @@ class IconActivationContractTests(unittest.TestCase):
         self.assertIn("dispatch_async(dispatch_get_main_queue()", TWEAK)
         self.assertGreaterEqual(TWEAK.count("ad_updateAppDataSwipeGestureAvailability"), 6)
 
+    def test_folder_icons_do_not_mutate_temporary_scroll_containers(self):
+        self.assertNotIn("desktopScrollView", CONTROLLER)
+        self.assertNotIn("scrollView.panGestureRecognizer.enabled = NO", CONTROLLER)
+        self.assertNotIn("scrollView.scrollEnabled = NO", CONTROLLER)
+
+    def test_folder_close_disables_instead_of_detaching_touch_recognizer(self):
+        start = TWEAK.index("%new\n- (void)ad_updateAppDataSwipeGestureAvailability")
+        end = TWEAK.index("- (void)ad_appDataSwipePreferenceChanged", start)
+        body = TWEAK[start:end]
+        self.assertIn("adAppDataSwipeGestureRecognizer.enabled = shouldInstall", body)
+        self.assertNotIn("removeGestureRecognizer", body)
+        self.assertIn("removeObserver:self", TWEAK)
+
 
 if __name__ == "__main__":
     unittest.main()

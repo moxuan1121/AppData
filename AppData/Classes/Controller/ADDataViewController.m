@@ -42,7 +42,6 @@
 @property (nonatomic, assign) BOOL isCopyingIdentifier;
 
 @property (nonatomic, strong) UIScreenEdgePanGestureRecognizer *screenEdgeGesture;
-@property (nonatomic, weak) UIScrollView *desktopScrollView;
 
 @end
 
@@ -176,22 +175,6 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
             [[UISelectionFeedbackGenerator new] selectionChanged];
             ADDataViewController *dataViewController = [[ADDataViewController alloc] initWithAppData:appData];
             
-            // ================= 新增：拦截桌面滑动 =================
-            UIView *superview = iconView.superview;
-            while (superview) {
-                if ([superview isKindOfClass:NSClassFromString(@"SBIconScrollView")] || [superview isKindOfClass:[UIScrollView class]]) {
-                    UIScrollView *scrollView = (UIScrollView *)superview;
-                    dataViewController.desktopScrollView = scrollView;
-                    // 禁用再启用 pan 手势，强制打断当前的手指滑动事件追踪
-                    scrollView.panGestureRecognizer.enabled = NO;
-                    scrollView.panGestureRecognizer.enabled = YES;
-                    scrollView.scrollEnabled = NO; // 临时禁用滚动
-                    break;
-                }
-                superview = superview.superview;
-            }
-            // ====================================================
-
             if (IS_IPAD) {
                 dataViewController.contentView.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner | kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
                 dataViewController.presentationManager.configuration.fadeAnimationAlpha = 0;
@@ -261,7 +244,8 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
     [self dismissViewControllerAnimated:animated completion:completion];
 }
 
-// ================= 核心修复：利用生命周期自动恢复防滑与 Dock =================
+// Restore Dock state only. The icon recognizer now owns its touch arbitration;
+// never disable an arbitrary ancestor scroll view, especially a folder container.
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
     
@@ -272,19 +256,8 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
             [self.class presentFloatingDockIfNeeded];
         }
         
-        if (self.desktopScrollView) {
-            self.desktopScrollView.scrollEnabled = YES;
-        }
     }
 }
-
-- (void)dealloc {
-    // 兜底保障：当应用进入后台 SpringBoard 直接回收内存强制销毁时，强制恢复桌面滑动
-    if (_desktopScrollView) {
-        _desktopScrollView.scrollEnabled = YES;
-    }
-}
-// =======================================================================
 
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations {
     return UIInterfaceOrientationMaskPortrait;

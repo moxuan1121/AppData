@@ -232,12 +232,14 @@ static SBIconView *ADApplicationIconViewForImageView(UIView *imageView) {
     }
     if (!self.adAppDataSwipeGestureRecognizer) return;
     BOOL installed = [self.gestureRecognizers containsObject:self.adAppDataSwipeGestureRecognizer];
-    if (shouldInstall && !installed) {
+    if (!installed) {
         self.userInteractionEnabled = YES;
         [self addGestureRecognizer:self.adAppDataSwipeGestureRecognizer];
-    } else if (!shouldInstall && installed) {
-        [self removeGestureRecognizer:self.adAppDataSwipeGestureRecognizer];
     }
+    // Do not remove a recognizer while SpringBoard is moving a folder icon between
+    // temporary containers. Mutating the gesture graph during the close animation
+    // can leave UIKit's internal failure dependencies pointing at a detached view.
+    self.adAppDataSwipeGestureRecognizer.enabled = shouldInstall;
 }
 
 %new
@@ -270,6 +272,11 @@ static SBIconView *ADApplicationIconViewForImageView(UIView *imageView) {
 - (void)layoutSubviews {
     %orig;
     [self ad_updateAppDataSwipeGestureAvailability];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:kAppDataSwipeUpPreferencesChangedNotification object:nil];
+    %orig;
 }
 
 - (void)setApplicationShortcutItems:(NSArray *)items {
