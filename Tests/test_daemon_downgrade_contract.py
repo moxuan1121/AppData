@@ -64,7 +64,8 @@ class DaemonDowngradeContractTests(unittest.TestCase):
     def test_daemon_result_object_is_checked_without_password_retry_loop(self):
         self.assertIn('NSSelectorFromString(@"success")', SOURCE)
         self.assertIn('NSSelectorFromString(@"error")', SOURCE)
-        self.assertIn("if (purchaseSucceeded) {", SOURCE)
+        self.assertIn("BOOL daemonAcceptedPurchase = purchaseSucceeded", SOURCE)
+        self.assertIn("if (daemonAcceptedPurchase) {", SOURCE)
         self.assertNotIn("attempt:1", SOURCE)
         self.assertIn("downgrade_writeDiagnosticForError", SOURCE)
         self.assertIn("com.moxuan.appdata.downgrade-diagnostic.plist", SOURCE)
@@ -106,15 +107,15 @@ class DaemonDowngradeContractTests(unittest.TestCase):
         self.assertIn("attempt == 4", SOURCE)
         self.assertIn("attempt >= 11", SOURCE)
 
-    def test_cross_store_downgrade_skips_known_1060_daemon_path(self):
-        self.assertIn("ADDowngradeCrossStoreFallbackKey", SOURCE)
-        install = SOURCE.index("- (void)downgrade_installWithTrackID:")
-        selection = SOURCE.index("- (void)downgrade_presentVersionSelection:", install)
-        body = SOURCE[install:selection]
-        fallback = body.index("[self _fallback_downgrade_installWithTrackID")
-        daemon = body.index("[self _downgrade_installWithTrackID")
-        self.assertLess(fallback, daemon)
-        self.assertIn("avoid ASDErrorDomain 1060 authentication dialog", body)
+    def test_daemon_1060_is_treated_as_accepted_without_duplicate_purchase(self):
+        self.assertNotIn("ADDowngradeCrossStoreFallbackKey", SOURCE)
+        result_handler = SOURCE.index("BOOL daemonAcceptedPurchase")
+        failure = SOURCE.index("AppStoreDaemon purchase failed", result_handler)
+        body = SOURCE[result_handler:failure]
+        self.assertIn('isEqualToString:@"ASDErrorDomain"', body)
+        self.assertIn("purchaseError.code == 1060", body)
+        self.assertIn("downgrade_beginConservativeStoreRestoreMonitoring", body)
+        self.assertNotIn("_fallback_downgrade_installWithTrackID", body)
 
     def test_daemon_error_follows_original_storekitui_fallback(self):
         failure = SOURCE.index("AppStoreDaemon purchase failed")

@@ -65,7 +65,6 @@ typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIden
 static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStoreAccountKey;
 static const void *ADDowngradeInitialVersionKey = &ADDowngradeInitialVersionKey;
 static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonitorTokenKey;
-static const void *ADDowngradeCrossStoreFallbackKey = &ADDowngradeCrossStoreFallbackKey;
 
 @interface ADAppSelectionViewController : UITableViewController <UISearchResultsUpdating>
 @property (nonatomic, copy) NSArray<LSApplicationProxy *> *applications;
@@ -487,7 +486,6 @@ static const void *ADDowngradeCrossStoreFallbackKey = &ADDowngradeCrossStoreFall
     objc_setAssociatedObject(self, ADDowngradeOriginalStoreAccountKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(self, ADDowngradeInitialVersionKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(self, ADDowngradeRestoreMonitorTokenKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(self, ADDowngradeCrossStoreFallbackKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     NSError *restoreError = nil;
     if (![self switchStoreAccountTo:originalAccount error:&restoreError]) {
         NSLog(@"[AppData Downgrade] failed to restore original storefront (%@/%ld)",
@@ -624,16 +622,11 @@ static const void *ADDowngradeCrossStoreFallbackKey = &ADDowngradeCrossStoreFall
     NSString *originalName = [originalAccount accountName];
     if (accountName.length > 0 && originalName.length > 0 &&
         [accountName caseInsensitiveCompare:originalName] == NSOrderedSame) {
-        objc_setAssociatedObject(self, ADDowngradeCrossStoreFallbackKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         if (completion) completion(YES);
         return;
     }
     if (account != originalAccount) {
         objc_setAssociatedObject(self, ADDowngradeOriginalStoreAccountKey, originalAccount, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        // A cross-store ASDPurchase is the path that presents a password dialog and
-        // then reports ASDErrorDomain 1060 on this system. Its StoreKitUI fallback is
-        // already proven to create the downgrade job, so skip the failing first hop.
-        objc_setAssociatedObject(self, ADDowngradeCrossStoreFallbackKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     [self switchStoreAccountTo:account error:nil];
     [self downgrade_waitForAccount:account attempt:0 stableChecks:0 completion:completion];
@@ -1006,8 +999,18 @@ static const void *ADDowngradeCrossStoreFallbackKey = &ADDowngradeCrossStoreFall
                 if (!purchaseError && result && [result respondsToSelector:errorSelector]) {
                     purchaseError = ((id (*)(id, SEL))objc_msgSend)(result, errorSelector);
                 }
-                if (purchaseSucceeded) {
+                BOOL daemonAcceptedPurchase = purchaseSucceeded ||
+                    ([purchaseError.domain isEqualToString:@"ASDErrorDomain"] && purchaseError.code == 1060);
+                if (daemonAcceptedPurchase) {
                     dispatch_async(dispatch_get_main_queue(), ^{
+                        if (!purchaseSucceeded) {
+                            // On the affected iOS/AppStoreDaemon combination, 1060 is
+                            // returned after the install job has already been created.
+                            // Submitting the same purchase again through StoreKitUI
+                            // produces a second authentication request and a password
+                            // sheet even though the first downgrade is running.
+                            NSLog(@"[AppData Downgrade] AppStoreDaemon returned non-fatal 1060; monitoring the accepted install job");
+                        }
                         [strongDataSource downgrade_beginConservativeStoreRestoreMonitoring];
                     });
                     return;
@@ -1039,11 +1042,6 @@ static const void *ADDowngradeCrossStoreFallbackKey = &ADDowngradeCrossStoreFall
     NSString *initialVersion = [self downgrade_installedVersionSignatureForBundleIdentifier:self.appData.bundleIdentifier];
     objc_setAssociatedObject(self, ADDowngradeInitialVersionKey, initialVersion, OBJC_ASSOCIATION_COPY_NONATOMIC);
     objc_setAssociatedObject(self, ADDowngradeRestoreMonitorTokenKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    if ([objc_getAssociatedObject(self, ADDowngradeCrossStoreFallbackKey) boolValue]) {
-        NSLog(@"[AppData Downgrade] cross-store account is stable; using StoreKitUI directly to avoid ASDErrorDomain 1060 authentication dialog");
-        [self _fallback_downgrade_installWithTrackID:trackId versionID:versionId];
-        return;
-    }
     [self _downgrade_installWithTrackID:trackId versionID:versionId];
 }
 
