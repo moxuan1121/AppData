@@ -106,6 +106,16 @@ class DaemonDowngradeContractTests(unittest.TestCase):
         self.assertIn("attempt == 4", SOURCE)
         self.assertIn("attempt >= 11", SOURCE)
 
+    def test_cross_store_downgrade_skips_known_1060_daemon_path(self):
+        self.assertIn("ADDowngradeCrossStoreFallbackKey", SOURCE)
+        install = SOURCE.index("- (void)downgrade_installWithTrackID:")
+        selection = SOURCE.index("- (void)downgrade_presentVersionSelection:", install)
+        body = SOURCE[install:selection]
+        fallback = body.index("[self _fallback_downgrade_installWithTrackID")
+        daemon = body.index("[self _downgrade_installWithTrackID")
+        self.assertLess(fallback, daemon)
+        self.assertIn("avoid ASDErrorDomain 1060 authentication dialog", body)
+
     def test_daemon_error_follows_original_storekitui_fallback(self):
         failure = SOURCE.index("AppStoreDaemon purchase failed")
         fallback = SOURCE.index("[strongDataSource _fallback_downgrade_installWithTrackID", failure)
