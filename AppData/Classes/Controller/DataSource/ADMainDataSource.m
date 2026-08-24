@@ -553,6 +553,64 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
     [self downgrade_pollForInstalledVersionChangeWithToken:token bundleIdentifier:bundleIdentifier deadline:deadline];
 }
 
+- (BOOL)downgrade_isSavedAccountActive:(SSAccount *)targetAccount {
+    NSString *targetName = [targetAccount accountName];
+    if (targetName.length == 0) return NO;
+    SSAccountStore *store = [objc_getClass("SSAccountStore") defaultStore];
+    for (SSAccount *account in [store accounts]) {
+        if ([account isLocalAccount] || ![account isActive]) continue;
+        if ([[account accountName] caseInsensitiveCompare:targetName] == NSOrderedSame) return YES;
+    }
+    return NO;
+}
+
+- (void)downgrade_waitForAccount:(SSAccount *)targetAccount
+                          attempt:(NSUInteger)attempt
+                     stableChecks:(NSUInteger)stableChecks
+                       completion:(void(^)(BOOL success))completion {
+    BOOL active = [self downgrade_isSavedAccountActive:targetAccount];
+    NSUInteger nextStableChecks = active ? stableChecks + 1 : 0;
+    if (nextStableChecks >= 3) {
+        id device = [objc_getClass("SSDevice") currentDevice];
+        if ([device respondsToSelector:@selector(reloadStoreFrontIdentifier)]) [device reloadStoreFrontIdentifier];
+        id controller = [[objc_getClass("SKUIClientContext") defaultContext] applicationController];
+        if ([controller respondsToSelector:@selector(_resetUserInterfaceAfterStoreFrontChange)]) {
+            [controller _resetUserInterfaceAfterStoreFrontChange];
+        }
+        // The account has remained active across three independent reads. Give
+        // StoreServices and appstored two more seconds to publish the new storefront
+        // before constructing ASDPurchase/SKUI purchase objects.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            if (completion) completion(YES);
+        });
+        return;
+    }
+
+    if (attempt >= 11) {
+        NSLog(@"[AppData Downgrade] target store account did not become stable");
+        [self showDowngradeMessage:@"目标 App Store 账号尚未完成切换，为避免触发密码验证，本次降级已暂停，请稍后重试。"
+                               title:@"商店切换未完成"];
+        [self downgrade_restoreOriginalStoreAccount];
+        if (completion) completion(NO);
+        return;
+    }
+
+    if (!active && attempt == 4) {
+        // StoreServices occasionally acknowledges a saved account change before its
+        // active-account cache is updated. Re-apply once, still without credentials.
+        [targetAccount setActive:YES];
+        [[objc_getClass("SSAccountStore") defaultStore] saveAccount:targetAccount verifyCredentials:NO error:nil];
+        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
+                                             CFSTR("com.storeswitcher.accounts_changed"), NULL, NULL, YES);
+    }
+
+    id device = [objc_getClass("SSDevice") currentDevice];
+    if ([device respondsToSelector:@selector(reloadStoreFrontIdentifier)]) [device reloadStoreFrontIdentifier];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        [self downgrade_waitForAccount:targetAccount attempt:attempt + 1 stableChecks:nextStableChecks completion:completion];
+    });
+}
+
 - (void)downgrade_switchToAccount:(SSAccount *)account
                     originalAccount:(SSAccount *)originalAccount
                          completion:(void(^)(BOOL success))completion {
@@ -560,14 +618,18 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
         if (completion) completion(NO);
         return;
     }
+    NSString *accountName = [account accountName];
+    NSString *originalName = [originalAccount accountName];
+    if (accountName.length > 0 && originalName.length > 0 &&
+        [accountName caseInsensitiveCompare:originalName] == NSOrderedSame) {
+        if (completion) completion(YES);
+        return;
+    }
     if (account != originalAccount) {
         objc_setAssociatedObject(self, ADDowngradeOriginalStoreAccountKey, originalAccount, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     [self switchStoreAccountTo:account error:nil];
-    // AppData 2.3.0 waits 0.5 seconds after activating the saved SSAccount.
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-        if (completion) completion(YES);
-    });
+    [self downgrade_waitForAccount:account attempt:0 stableChecks:0 completion:completion];
 }
 
 - (void)downgrade_presentSavedAccountSelectionWithMessage:(NSString *)message

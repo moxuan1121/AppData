@@ -98,9 +98,13 @@ class DaemonDowngradeContractTests(unittest.TestCase):
         self.assertIn("downgrade_presentSavedAccountSelectionWithMessage", body)
         self.assertIn("无法从应用元数据自动确认购买账号", body)
 
-    def test_original_account_switch_timing_is_preserved(self):
+    def test_cross_store_switch_waits_for_stable_saved_account(self):
         self.assertIn("saveAccount:targetAccount verifyCredentials:NO error:nil", SOURCE)
-        self.assertIn("0.5 * NSEC_PER_SEC", SOURCE)
+        self.assertIn("downgrade_waitForAccount", SOURCE)
+        self.assertIn("nextStableChecks >= 3", SOURCE)
+        self.assertIn("2 * NSEC_PER_SEC", SOURCE)
+        self.assertIn("attempt == 4", SOURCE)
+        self.assertIn("attempt >= 11", SOURCE)
 
     def test_daemon_error_follows_original_storekitui_fallback(self):
         failure = SOURCE.index("AppStoreDaemon purchase failed")
