@@ -74,6 +74,13 @@ class DaemonDowngradeContractTests(unittest.TestCase):
         self.assertIn("downgrade_restoreOriginalStoreAccount", SOURCE)
         self.assertGreaterEqual(SOURCE.count("[strongDataSource downgrade_restoreOriginalStoreAccount]"), 3)
 
+    def test_appstoredaemon_has_dialog_observer_and_presenting_scene(self):
+        self.assertIn("ASDNotificationCenter", SOURCE)
+        self.assertIn("setDialogObserver:", SOURCE)
+        self.assertIn("handleAuthenticateRequest:resultHandler:", SOURCE)
+        self.assertIn("setPresentingSceneIdentifier:", SOURCE)
+        self.assertIn("UISceneActivationStateForegroundActive", SOURCE)
+
     def test_success_closes_panel_without_started_alert(self):
         self.assertNotIn("已发起降级", SOURCE)
         self.assertNotIn("降级任务已提交", SOURCE)

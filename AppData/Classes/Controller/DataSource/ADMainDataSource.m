@@ -61,6 +61,11 @@
 - (id)applicationController;
 @end
 
+@interface ASDNotificationCenter : NSObject
++ (id)defaultCenter;
+- (void)setDialogObserver:(id)observer;
+@end
+
 typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIdentifiers);
 static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStoreAccountKey;
 
@@ -508,6 +513,41 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
     }
 }
 
+- (void)downgrade_configureAppStoreDialogObserver {
+    dlopen("/System/Library/PrivateFrameworks/StoreKitUI.framework/StoreKitUI", RTLD_LAZY | RTLD_LOCAL);
+    id context = [objc_getClass("SKUIClientContext") defaultContext];
+    id applicationController = [context respondsToSelector:@selector(applicationController)]
+        ? [context applicationController] : nil;
+    SEL authenticateSelector = NSSelectorFromString(@"handleAuthenticateRequest:resultHandler:");
+    SEL dialogSelector = NSSelectorFromString(@"handleDialogRequest:resultHandler:");
+    id observer = nil;
+    for (id candidate in @[applicationController ?: [NSNull null], context ?: [NSNull null]]) {
+        if (candidate != [NSNull null] &&
+            ([candidate respondsToSelector:authenticateSelector] || [candidate respondsToSelector:dialogSelector])) {
+            observer = candidate;
+            break;
+        }
+    }
+    Class notificationCenterClass = objc_getClass("ASDNotificationCenter");
+    if (observer && [notificationCenterClass respondsToSelector:@selector(defaultCenter)]) {
+        id center = [notificationCenterClass defaultCenter];
+        if ([center respondsToSelector:@selector(setDialogObserver:)]) {
+            [center setDialogObserver:observer];
+        }
+    }
+}
+
+- (NSString *)downgrade_foregroundSceneIdentifier {
+    if (@available(iOS 13.0, *)) {
+        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState != UISceneActivationStateForegroundActive) continue;
+            NSString *identifier = scene.session.persistentIdentifier;
+            if ([identifier isKindOfClass:[NSString class]] && identifier.length > 0) return identifier;
+        }
+    }
+    return nil;
+}
+
 - (void)downgrade_verifyOwnershipWithCompletion:(void(^)(BOOL success))completion {
     if (![self downgrade_requireActiveStoreAccount]) {
         if (completion) completion(NO);
@@ -766,6 +806,7 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
     }
 
     @try {
+        [self downgrade_configureAppStoreDialogObserver];
         id purchase = [[purchaseClass alloc] init];
         SEL setBuyParametersSelector = NSSelectorFromString(@"setBuyParameters:");
         SEL setIsRedownloadSelector = NSSelectorFromString(@"setIsRedownload:");
@@ -787,6 +828,11 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
         SEL cancelInstalledSelector = NSSelectorFromString(@"setShouldCancelForInstalledBundleItems:");
         if ([purchase respondsToSelector:cancelInstalledSelector]) {
             ((void (*)(id, SEL, BOOL))objc_msgSend)(purchase, cancelInstalledSelector, NO);
+        }
+        NSString *sceneIdentifier = [self downgrade_foregroundSceneIdentifier];
+        SEL sceneSelector = NSSelectorFromString(@"setPresentingSceneIdentifier:");
+        if (sceneIdentifier.length > 0 && [purchase respondsToSelector:sceneSelector]) {
+            ((void (*)(id, SEL, id))objc_msgSend)(purchase, sceneSelector, sceneIdentifier);
         }
 
         id manager = nil;
