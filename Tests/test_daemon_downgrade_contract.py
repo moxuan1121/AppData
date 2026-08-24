@@ -76,6 +76,10 @@ class DaemonDowngradeContractTests(unittest.TestCase):
 
     def test_appstoredaemon_has_dialog_observer_and_presenting_scene(self):
         self.assertIn("ASDNotificationCenter", SOURCE)
+        self.assertIn("SKClientBroker", SOURCE)
+        self.assertIn("SKPaymentQueue", SOURCE)
+        self.assertIn("defaultQueue", SOURCE)
+        self.assertIn("defaultBroker", SOURCE)
         self.assertIn("setDialogObserver:", SOURCE)
         self.assertIn("handleAuthenticateRequest:resultHandler:", SOURCE)
         self.assertIn("setPresentingSceneIdentifier:", SOURCE)

@@ -66,6 +66,14 @@
 - (void)setDialogObserver:(id)observer;
 @end
 
+@interface SKClientBroker : NSObject
++ (id)defaultBroker;
+@end
+
+@interface SKPaymentQueue (ADDialogObserverBootstrap)
++ (id)defaultQueue;
+@end
+
 typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIdentifiers);
 static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStoreAccountKey;
 
@@ -514,22 +522,23 @@ static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStor
 }
 
 - (void)downgrade_configureAppStoreDialogObserver {
-    dlopen("/System/Library/PrivateFrameworks/StoreKitUI.framework/StoreKitUI", RTLD_LAZY | RTLD_LOCAL);
-    id context = [objc_getClass("SKUIClientContext") defaultContext];
-    id applicationController = [context respondsToSelector:@selector(applicationController)]
-        ? [context applicationController] : nil;
+    dlopen("/System/Library/Frameworks/StoreKit.framework/StoreKit", RTLD_LAZY | RTLD_LOCAL);
+    // Initializing the default payment queue registers StoreKit's real dialog
+    // client with SKClientBroker. The broker, not SKUIClientContext, implements
+    // ASDNotificationCenterDialogObserver on iOS.
+    Class paymentQueueClass = objc_getClass("SKPaymentQueue");
+    if ([paymentQueueClass respondsToSelector:@selector(defaultQueue)]) {
+        [paymentQueueClass defaultQueue];
+    }
+    Class brokerClass = objc_getClass("SKClientBroker");
+    id observer = [brokerClass respondsToSelector:@selector(defaultBroker)]
+        ? [brokerClass defaultBroker] : nil;
     SEL authenticateSelector = NSSelectorFromString(@"handleAuthenticateRequest:resultHandler:");
     SEL dialogSelector = NSSelectorFromString(@"handleDialogRequest:resultHandler:");
-    id observer = nil;
-    for (id candidate in @[applicationController ?: [NSNull null], context ?: [NSNull null]]) {
-        if (candidate != [NSNull null] &&
-            ([candidate respondsToSelector:authenticateSelector] || [candidate respondsToSelector:dialogSelector])) {
-            observer = candidate;
-            break;
-        }
-    }
     Class notificationCenterClass = objc_getClass("ASDNotificationCenter");
-    if (observer && [notificationCenterClass respondsToSelector:@selector(defaultCenter)]) {
+    if (observer && [observer respondsToSelector:authenticateSelector] &&
+        [observer respondsToSelector:dialogSelector] &&
+        [notificationCenterClass respondsToSelector:@selector(defaultCenter)]) {
         id center = [notificationCenterClass defaultCenter];
         if ([center respondsToSelector:@selector(setDialogObserver:)]) {
             [center setDialogObserver:observer];
