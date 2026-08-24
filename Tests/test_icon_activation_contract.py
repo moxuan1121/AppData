@@ -27,30 +27,28 @@ class IconActivationContractTests(unittest.TestCase):
         self.assertIn("SBFolderIcon", TWEAK)
         self.assertIn("SBWidgetIcon", TWEAK)
 
-    def test_modern_swipe_is_attached_to_stable_icon_touch_view(self):
-        self.assertIn("adAppDataSwipeGestureRecognizer", TWEAK)
-        self.assertIn("presentControllerFromSBIconView:self fromContextMenu:NO", TWEAK)
-        self.assertIn("- (void)didMoveToWindow", TWEAK)
-        self.assertIn("- (void)didMoveToSuperview", TWEAK)
-        self.assertIn("- (void)layoutSubviews", TWEAK)
-        self.assertIn("if (@available(iOS 13.0, *))", TWEAK)
+    def test_swipe_is_attached_only_to_the_icon_image_layer(self):
+        self.assertNotIn("adAppDataSwipeGestureRecognizer", TWEAK)
+        self.assertNotIn("presentControllerFromSBIconView:self fromContextMenu:NO", TWEAK)
+        self.assertIn("ADApplicationIconViewForImageView(self)", TWEAK)
+        self.assertIn("presentControllerFromSBIconView:iconView fromContextMenu:NO", TWEAK)
 
-    def test_icon_reuse_rechecks_after_window_attachment(self):
-        self.assertIn("dispatch_async(dispatch_get_main_queue()", TWEAK)
-        self.assertGreaterEqual(TWEAK.count("ad_updateAppDataSwipeGestureAvailability"), 6)
+    def test_icon_image_rechecks_after_window_attachment(self):
+        self.assertIn("%hook SBIconImageView", TWEAK)
+        self.assertIn("- (void)didMoveToWindow", TWEAK)
+        self.assertGreaterEqual(TWEAK.count("ad_updateSwipeGestureAvailability"), 3)
 
     def test_folder_icons_do_not_mutate_temporary_scroll_containers(self):
         self.assertNotIn("desktopScrollView", CONTROLLER)
         self.assertNotIn("scrollView.panGestureRecognizer.enabled = NO", CONTROLLER)
         self.assertNotIn("scrollView.scrollEnabled = NO", CONTROLLER)
 
-    def test_folder_close_disables_instead_of_detaching_touch_recognizer(self):
-        start = TWEAK.index("%new\n- (void)ad_updateAppDataSwipeGestureAvailability")
-        end = TWEAK.index("- (void)ad_appDataSwipePreferenceChanged", start)
-        body = TWEAK[start:end]
-        self.assertIn("adAppDataSwipeGestureRecognizer.enabled = shouldInstall", body)
-        self.assertNotIn("removeGestureRecognizer", body)
-        self.assertIn("removeObserver:self", TWEAK)
+    def test_folder_close_does_not_run_icon_view_lifecycle_hooks(self):
+        modern_group = TWEAK[TWEAK.index("%group IOS13_AND_NEWER_HOOKS"):]
+        self.assertNotIn("- (void)didMoveToSuperview", modern_group)
+        self.assertNotIn("- (void)layoutSubviews", modern_group)
+        self.assertNotIn("- (void)dealloc", modern_group)
+        self.assertNotIn("dispatch_async(dispatch_get_main_queue()", modern_group)
 
 
 if __name__ == "__main__":

@@ -6,14 +6,6 @@
 - (void)ad_updateSwipeGestureAvailability;
 @end
 
-@interface SBIconView (AppDataSwipe)
-@property (nonatomic, retain) UISwipeGestureRecognizer *adAppDataSwipeGestureRecognizer;
-- (BOOL)ad_isSupportedIcon;
-- (void)ad_updateAppDataSwipeGestureAvailability;
-- (void)ad_appDataSwipePreferenceChanged:(NSNotification *)notification;
-- (void)ad_handleAppDataSwipeUp:(UISwipeGestureRecognizer *)gesture;
-@end
-
 @interface SBMainWorkspace : NSObject
 @end
 
@@ -103,11 +95,6 @@ static SBIconView *ADApplicationIconViewForImageView(UIView *imageView) {
 - (SBIconImageView *)initWithFrame:(CGRect)arg1 {
     %log;
     SBIconImageView *r = %orig;
-    if (@available(iOS 13.0, *)) {
-        // Modern SpringBoard frequently replaces/crossfades this image-only view.
-        // The stable SBIconView touch surface owns the recognizer on iOS 13+.
-        return r;
-    }
     if (![r isKindOfClass:NSClassFromString(@"SBFolderIconImageView")]
         && ![r isKindOfClass:NSClassFromString(@"SBIconImageCrossfadeView")]
         && [r respondsToSelector:@selector(setAdSwipeGestureRecognizer:)]) {
@@ -130,12 +117,6 @@ static SBIconView *ADApplicationIconViewForImageView(UIView *imageView) {
 
 %new
 - (void)ad_updateSwipeGestureAvailability {
-    if (@available(iOS 13.0, *)) {
-        if (self.adSwipeGestureRecognizer && [self.gestureRecognizers containsObject:self.adSwipeGestureRecognizer]) {
-            [self removeGestureRecognizer:self.adSwipeGestureRecognizer];
-        }
-        return;
-    }
     if (!self.adSwipeGestureRecognizer
         && ![self isKindOfClass:NSClassFromString(@"SBFolderIconImageView")]
         && ![self isKindOfClass:NSClassFromString(@"SBIconImageCrossfadeView")]) {
@@ -213,71 +194,6 @@ static SBIconView *ADApplicationIconViewForImageView(UIView *imageView) {
 %group IOS13_AND_NEWER_HOOKS
 
 %hook SBIconView
-
-%property (nonatomic, retain) UISwipeGestureRecognizer *adAppDataSwipeGestureRecognizer;
-
-%new
-- (void)ad_updateAppDataSwipeGestureAvailability {
-    BOOL shouldInstall = self.window && [ADSettings swipeUpEnabled] && [self ad_isSupportedIcon];
-    if (shouldInstall && !self.adAppDataSwipeGestureRecognizer) {
-        UISwipeGestureRecognizer *recognizer = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(ad_handleAppDataSwipeUp:)];
-        recognizer.direction = UISwipeGestureRecognizerDirectionUp;
-        recognizer.cancelsTouchesInView = YES;
-        recognizer.delaysTouchesBegan = NO;
-        self.adAppDataSwipeGestureRecognizer = recognizer;
-        [[NSNotificationCenter defaultCenter] addObserver:self
-                                                 selector:@selector(ad_appDataSwipePreferenceChanged:)
-                                                     name:kAppDataSwipeUpPreferencesChangedNotification
-                                                   object:nil];
-    }
-    if (!self.adAppDataSwipeGestureRecognizer) return;
-    BOOL installed = [self.gestureRecognizers containsObject:self.adAppDataSwipeGestureRecognizer];
-    if (!installed) {
-        self.userInteractionEnabled = YES;
-        [self addGestureRecognizer:self.adAppDataSwipeGestureRecognizer];
-    }
-    // Do not remove a recognizer while SpringBoard is moving a folder icon between
-    // temporary containers. Mutating the gesture graph during the close animation
-    // can leave UIKit's internal failure dependencies pointing at a detached view.
-    self.adAppDataSwipeGestureRecognizer.enabled = shouldInstall;
-}
-
-%new
-- (void)ad_appDataSwipePreferenceChanged:(NSNotification *)notification {
-    (void)notification;
-    [self ad_updateAppDataSwipeGestureAvailability];
-}
-
-%new
-- (void)ad_handleAppDataSwipeUp:(UISwipeGestureRecognizer *)gesture {
-    if (gesture.state != UIGestureRecognizerStateEnded || ![self ad_isSupportedIcon]) return;
-    [ADDataViewController presentControllerFromSBIconView:self fromContextMenu:NO];
-}
-
-- (void)didMoveToWindow {
-    %orig;
-    [self ad_updateAppDataSwipeGestureAvailability];
-    // Icon views are reused and can receive their icon after didMoveToWindow.
-    // Recheck on the next main-loop turn so the recognizer is never left detached.
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if (self.window) [self ad_updateAppDataSwipeGestureAvailability];
-    });
-}
-
-- (void)didMoveToSuperview {
-    %orig;
-    [self ad_updateAppDataSwipeGestureAvailability];
-}
-
-- (void)layoutSubviews {
-    %orig;
-    [self ad_updateAppDataSwipeGestureAvailability];
-}
-
-- (void)dealloc {
-    [[NSNotificationCenter defaultCenter] removeObserver:self name:kAppDataSwipeUpPreferencesChangedNotification object:nil];
-    %orig;
-}
 
 - (void)setApplicationShortcutItems:(NSArray *)items {
     if ([ADSettings forceTouchMenuEnabled] && [self ad_isSupportedIcon]) {
