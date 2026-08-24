@@ -123,28 +123,37 @@ jobs:
           cp -r AppData/Package Package_RootHide
 
           # 写入编译产物
-          cp build/Release-iphoneos/AppData.dylib Package_RootHide/Library/MobileSubstrate/DynamicLibraries/
+          cp build/Release-iphoneos/AppData.dylib Package_RootHide/usr/lib/TweakInject/
           cp -a build/Release-iphoneos/AppDataPrefs.bundle/* Package_RootHide/Library/PreferenceBundles/AppDataPrefs.bundle/
           
           # RootHide 使用 iphoneos-arm64e 架构和 /var/jb 根路径
           sed -i '' 's/Architecture: iphoneos-arm/Architecture: iphoneos-arm64e/g' Package_RootHide/DEBIAN/control
           sed -i '' 's#Icon: file:///Library/#Icon: file:///var/jb/Library/#g' Package_RootHide/DEBIAN/control
-          chmod 0755 Package_RootHide/DEBIAN/prerm Package_RootHide/DEBIAN/postrm
+          chmod 0755 Package_RootHide/DEBIAN/postinst
           
           mkdir -p Package_RootHide/var/jb
           mv Package_RootHide/Library Package_RootHide/var/jb/
+          mv Package_RootHide/usr Package_RootHide/var/jb/
           
           dpkg-deb -Zgzip -b Package_RootHide AppData-RootHide.deb
 
-          # Verify package identity and removal-safety scripts in the final DEB.
+          # Verify package identity and lifecycle safety in the final DEB.
           test "$(dpkg-deb -f AppData-RootHide.deb Package)" = "com.moxuan.appdata"
+          test "$(dpkg-deb -f AppData-RootHide.deb Version)" = "1.8.9"
           test "$(dpkg-deb -f AppData-RootHide.deb Architecture)" = "iphoneos-arm64e"
           verify_dir="$(mktemp -d)"
           dpkg-deb -e AppData-RootHide.deb "$verify_dir"
-          test -x "$verify_dir/prerm"
-          test -x "$verify_dir/postrm"
-          grep -q '/var/jb/Library/MobileSubstrate/DynamicLibraries' "$verify_dir/prerm"
-          grep -q '/var/jb/usr/lib/TweakInject' "$verify_dir/postrm"
+          test -x "$verify_dir/postinst"
+          test ! -e "$verify_dir/prerm"
+          test ! -e "$verify_dir/postrm"
+          grep -q '/usr/lib/TweakInject' "$verify_dir/postinst"
+          package_files="$(dpkg-deb -c AppData-RootHide.deb)"
+          echo "$package_files" | grep -q './var/jb/usr/lib/TweakInject/AppData.dylib'
+          echo "$package_files" | grep -q './var/jb/usr/lib/TweakInject/AppData.plist'
+          if echo "$package_files" | grep -q 'MobileSubstrate'; then
+            echo "Unsafe MobileSubstrate path found in package data"
+            exit 1
+          fi
 
       - name: Upload Dopamine RootHide DEB
         uses: actions/upload-artifact@v4

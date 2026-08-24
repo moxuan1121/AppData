@@ -42,10 +42,13 @@ back to the existing dynamically loaded `StoreKitUI.framework` purchase path.
 ## Package removal safety
 
 The package identifier is `com.moxuan.appdata` and it replaces the former
-`com.iosdump.appdata` package. RootHide removal scripts keep ElleKit's shared
-`/var/jb/Library/MobileSubstrate/DynamicLibraries` path present while dpkg
-removes AppData, then restore the canonical link to `/var/jb/usr/lib/TweakInject`
-when necessary. No ElleKit binary, loader, or package is removed by AppData.
+`com.iosdump.appdata` package. AppData installs only its own injection files in
+ElleKit's native `usr/lib/TweakInject` directory. The package data contains no
+`Library/MobileSubstrate` compatibility path and no ElleKit binary or loader.
+There are no removal scripts. A narrowly scoped `postinst configure` migration
+can restore a completely missing legacy compatibility link after upgrading from
+AppData 1.8.8 or earlier, but never overwrites an existing path or modifies the
+TweakInject target.
 
 ## Per-app automatic cache clearing
 
