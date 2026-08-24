@@ -27,6 +27,18 @@ class IconActivationContractTests(unittest.TestCase):
         self.assertIn("SBFolderIcon", TWEAK)
         self.assertIn("SBWidgetIcon", TWEAK)
 
+    def test_modern_swipe_is_attached_to_stable_icon_touch_view(self):
+        self.assertIn("adAppDataSwipeGestureRecognizer", TWEAK)
+        self.assertIn("presentControllerFromSBIconView:self fromContextMenu:NO", TWEAK)
+        self.assertIn("- (void)didMoveToWindow", TWEAK)
+        self.assertIn("- (void)didMoveToSuperview", TWEAK)
+        self.assertIn("- (void)layoutSubviews", TWEAK)
+        self.assertIn("if (@available(iOS 13.0, *))", TWEAK)
+
+    def test_icon_reuse_rechecks_after_window_attachment(self):
+        self.assertIn("dispatch_async(dispatch_get_main_queue()", TWEAK)
+        self.assertGreaterEqual(TWEAK.count("ad_updateAppDataSwipeGestureAvailability"), 6)
+
 
 if __name__ == "__main__":
     unittest.main()
