@@ -47,8 +47,10 @@ ElleKit's native `usr/lib/TweakInject` directory. The package data contains no
 `Library/MobileSubstrate` compatibility path and no ElleKit binary or loader.
 There are no removal scripts. A narrowly scoped `postinst configure` migration
 can restore a completely missing legacy compatibility link after upgrading from
-AppData 1.8.8 or earlier, but never overwrites an existing path or modifies the
-TweakInject target.
+AppData 1.8.8 or earlier. Because this repository packages explicit RootHide
+paths, that migration checks `/var/jb/usr/lib/TweakInject` and restores the
+matching `/var/jb/Library/MobileSubstrate/DynamicLibraries` entry. It never
+overwrites an existing path or modifies the TweakInject target.
 
 ## Per-app automatic cache clearing
 

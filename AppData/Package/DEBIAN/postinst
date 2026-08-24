@@ -3,15 +3,16 @@
 # Releases through 1.8.8 installed a directory entry over ElleKit's
 # MobileSubstrate compatibility link. While dpkg retires that old file list
 # during an upgrade, it can remove the compatibility entry even though ElleKit
-# owns the TweakInject target. Restore only a completely absent entry. Never
-# overwrite an existing directory, symlink (including a dangling symlink), or
-# anything inside TweakInject.
+# owns the TweakInject target. Version 1.8.9 checked the wrong unprefixed path
+# and could leave that entry missing. Restore only a completely absent entry.
+# Never overwrite an existing directory, symlink (including a dangling
+# symlink), or anything inside TweakInject.
 if [ "$1" = "configure" ] && \
-   [ -d /usr/lib/TweakInject ] && \
-   [ -d /Library/MobileSubstrate ] && \
-   [ ! -e /Library/MobileSubstrate/DynamicLibraries ] && \
-   [ ! -L /Library/MobileSubstrate/DynamicLibraries ]; then
-    ln -s /usr/lib/TweakInject /Library/MobileSubstrate/DynamicLibraries || true
+   [ -d /var/jb/usr/lib/TweakInject ] && \
+   [ -d /var/jb/Library/MobileSubstrate ] && \
+   [ ! -e /var/jb/Library/MobileSubstrate/DynamicLibraries ] && \
+   [ ! -L /var/jb/Library/MobileSubstrate/DynamicLibraries ]; then
+    ln -s /var/jb/usr/lib/TweakInject /var/jb/Library/MobileSubstrate/DynamicLibraries || true
 fi
 
 exit 0
