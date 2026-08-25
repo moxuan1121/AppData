@@ -12,7 +12,9 @@ if [ "$1" = "configure" ] && \
    [ -d /var/jb/Library/MobileSubstrate ] && \
    [ ! -e /var/jb/Library/MobileSubstrate/DynamicLibraries ] && \
    [ ! -L /var/jb/Library/MobileSubstrate/DynamicLibraries ]; then
-    ln -s /var/jb/usr/lib/TweakInject /var/jb/Library/MobileSubstrate/DynamicLibraries || true
+    # ElleKit's canonical RootHide compatibility link uses the jailbreak-root
+    # target. RootHide resolves it to /var/jb/usr/lib/TweakInject at runtime.
+    ln -s /usr/lib/TweakInject /var/jb/Library/MobileSubstrate/DynamicLibraries || true
 fi
 
 exit 0

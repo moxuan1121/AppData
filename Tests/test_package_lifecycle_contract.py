@@ -27,14 +27,13 @@ class PackageLifecycleContractTests(unittest.TestCase):
         self.assertIn("[ -d /var/jb/usr/lib/TweakInject ]", POSTINST)
         self.assertIn("[ ! -e /var/jb/Library/MobileSubstrate/DynamicLibraries ]", POSTINST)
         self.assertIn("[ ! -L /var/jb/Library/MobileSubstrate/DynamicLibraries ]", POSTINST)
-        self.assertIn("ln -s /var/jb/usr/lib/TweakInject /var/jb/Library/MobileSubstrate/DynamicLibraries", POSTINST)
+        self.assertIn("ln -s /usr/lib/TweakInject /var/jb/Library/MobileSubstrate/DynamicLibraries", POSTINST)
         self.assertNotIn("[ -d /usr/lib/TweakInject ]", POSTINST)
-        self.assertNotIn("ln -s /usr/lib/TweakInject", POSTINST)
         self.assertNotIn("ln -sf", POSTINST)
         self.assertNotIn("rm ", POSTINST)
 
     def test_roothide_dependency_and_version_are_explicit(self):
-        self.assertIn("Version: 1.8.10", CONTROL)
+        self.assertIn("Version: 1.8.11", CONTROL)
         self.assertIn("roothide", CONTROL)
         self.assertIn("Architecture: iphoneos-arm", CONTROL)
 

@@ -1,6 +1,6 @@
 Package: com.moxuan.appdata
 Name: AppData
-Version: 1.8.10
+Version: 1.8.11
 Description: 从主屏幕查看和管理应用数据
 Section: Tweaks
 Depends: firmware (>= 11.0), roothide, mobilesubstrate, preferenceloader
