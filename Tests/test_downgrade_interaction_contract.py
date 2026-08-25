@@ -24,6 +24,27 @@ class DowngradeInteractionContractTests(unittest.TestCase):
         self.assertLess(body.index("button.actionBlock();"), body.index("UISelectionFeedbackGenerator"))
         self.assertIn("dispatch_async(dispatch_get_main_queue()", body)
 
+    def test_server_choice_renders_loading_before_account_inspection(self):
+        choice = DATA_SOURCE.index('actionWithTitle:@"从服务器获取"')
+        custom = DATA_SOURCE.index('actionWithTitle:@"自定义版本号"', choice)
+        body = DATA_SOURCE[choice:custom]
+        loading = body.index('setDetail:@"获取版本..."')
+        account_check = body.index("downgrade_verifyOwnershipWithCompletion")
+        self.assertLess(loading, account_check)
+        self.assertIn("dispatch_async(dispatch_get_main_queue()", body[loading:account_check])
+        self.assertIn("if (!accountReady)", body)
+        self.assertIn('setDetail:@"版本回退"', body)
+
+    def test_app_specific_metadata_is_parsed_off_main_thread(self):
+        method = DATA_SOURCE.index("- (void)downgrade_verifyOwnershipWithCompletion:")
+        end = DATA_SOURCE.index("- (NSArray<NSDictionary *> *)downgrade_candidateRecordsFromJSON:", method)
+        body = DATA_SOURCE[method:end]
+        background = body.index("dispatch_get_global_queue(QOS_CLASS_USER_INITIATED")
+        metadata = body.index("downgrade_purchaserAccountName", background)
+        main = body.index("dispatch_get_main_queue()", metadata)
+        self.assertLess(background, metadata)
+        self.assertLess(metadata, main)
+
 
 if __name__ == "__main__":
     unittest.main()

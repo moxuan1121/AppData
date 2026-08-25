@@ -695,34 +695,42 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
 
     SSAccountStore *store = [objc_getClass("SSAccountStore") defaultStore];
     SSAccount *activeAccount = [self downgrade_activeStoreAccountFromStore:store];
-    NSString *activeName = [activeAccount accountName];
-    NSString *purchaserName = [self downgrade_purchaserAccountName];
-    if (purchaserName.length > 0 && [activeName caseInsensitiveCompare:purchaserName] == NSOrderedSame) {
-        if (completion) completion(YES);
-        return;
-    }
+    NSString *activeName = [[activeAccount accountName] copy];
 
-    if (purchaserName.length == 0) {
-        [self downgrade_presentSavedAccountSelectionWithMessage:@"无法从应用元数据自动确认购买账号。请选择最初获取该应用的账号；不会要求 AppData 保存密码。"
-                                                   activeAccount:activeAccount
-                                                      completion:completion];
-        return;
-    }
+    // Parsing iTunesMetadata.plist is the only app-specific disk read on this
+    // path. Large metadata files used to block SpringBoard's main thread before
+    // the panel could display "获取版本...".
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSString *purchaserName = [self downgrade_purchaserAccountName];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (purchaserName.length > 0 && [activeName caseInsensitiveCompare:purchaserName] == NSOrderedSame) {
+                if (completion) completion(YES);
+                return;
+            }
 
-    __block SSAccount *purchaserAccount = nil;
-    for (SSAccount *account in [store accounts]) {
-        if (![account isLocalAccount] && [[account accountName] caseInsensitiveCompare:purchaserName] == NSOrderedSame) {
-            purchaserAccount = account;
-            break;
-        }
-    }
+            if (purchaserName.length == 0) {
+                [self downgrade_presentSavedAccountSelectionWithMessage:@"无法从应用元数据自动确认购买账号。请选择最初获取该应用的账号；不会要求 AppData 保存密码。"
+                                                           activeAccount:activeAccount
+                                                              completion:completion];
+                return;
+            }
 
-    if (!purchaserAccount) {
-        NSString *message = [NSString stringWithFormat:@"应用记录的购买账号为 %@，但设备中没有完全匹配的账号。请选择正确的已保存账号。", purchaserName];
-        [self downgrade_presentSavedAccountSelectionWithMessage:message activeAccount:activeAccount completion:completion];
-        return;
-    }
-    [self downgrade_switchToAccount:purchaserAccount originalAccount:activeAccount completion:completion];
+            __block SSAccount *purchaserAccount = nil;
+            for (SSAccount *account in [store accounts]) {
+                if (![account isLocalAccount] && [[account accountName] caseInsensitiveCompare:purchaserName] == NSOrderedSame) {
+                    purchaserAccount = account;
+                    break;
+                }
+            }
+
+            if (!purchaserAccount) {
+                NSString *message = [NSString stringWithFormat:@"应用记录的购买账号为 %@，但设备中没有完全匹配的账号。请选择正确的已保存账号。", purchaserName];
+                [self downgrade_presentSavedAccountSelectionWithMessage:message activeAccount:activeAccount completion:completion];
+                return;
+            }
+            [self downgrade_switchToAccount:purchaserAccount originalAccount:activeAccount completion:completion];
+        });
+    });
 }
 
 - (NSArray<NSDictionary *> *)downgrade_candidateRecordsFromJSON:(id)json depth:(NSUInteger)depth {
@@ -1261,31 +1269,41 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
                                                                                       preferredStyle:UIAlertControllerStyleAlert];
 
                         [actionSheet addAction:[UIAlertAction actionWithTitle:@"从服务器获取" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-                            [self downgrade_verifyOwnershipWithCompletion:^(BOOL accountReady) {
-                                if (!accountReady) return;
-                                [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
-                                [weakActionsBar setDetail:@"查询信息..." forItemAtIndex:itemIndex];
-                                [self downgrade_fetchTrackIDWithCompletion:^(long long trackId, NSError *error) {
-                                    if (error || trackId == 0) {
-                                        [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
-                                        [weakActionsBar setDetail:@"获取失败" forItemAtIndex:itemIndex];
-                                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                                            [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
-                                        });
-                                        [self showDowngradeMessage:error ? error.localizedDescription : @"未知错误" title:@"获取失败"];
-                                        return;
-                                    }
-
-                                    [weakActionsBar setDetail:@"获取版本..." forItemAtIndex:itemIndex];
-                                    [self downgrade_fetchVersionsForTrackID:trackId completion:^(NSArray *versions, NSError *err) {
+                            // Update the panel before reading StoreServices account state or
+                            // iTunesMetadata. Those synchronous reads can take a second for
+                            // individual apps; deferring them one run-loop turn lets UIKit
+                            // render the loading state immediately after the menu selection.
+                            [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
+                            [weakActionsBar setDetail:@"获取版本..." forItemAtIndex:itemIndex];
+                            dispatch_async(dispatch_get_main_queue(), ^{
+                                [self downgrade_verifyOwnershipWithCompletion:^(BOOL accountReady) {
+                                    if (!accountReady) {
                                         [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
                                         [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
-
-                                        if (err) {
-                                            [self showDowngradeMessage:err.localizedDescription title:@"获取失败"];
+                                        return;
+                                    }
+                                    [self downgrade_fetchTrackIDWithCompletion:^(long long trackId, NSError *error) {
+                                        if (error || trackId == 0) {
+                                            [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
+                                            [weakActionsBar setDetail:@"获取失败" forItemAtIndex:itemIndex];
+                                            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                                                [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
+                                            });
+                                            [self showDowngradeMessage:error ? error.localizedDescription : @"未知错误" title:@"获取失败"];
                                             return;
                                         }
-                                        [self downgrade_presentVersionSelection:versions trackID:trackId];
+
+                                        [weakActionsBar setDetail:@"获取版本..." forItemAtIndex:itemIndex];
+                                        [self downgrade_fetchVersionsForTrackID:trackId completion:^(NSArray *versions, NSError *err) {
+                                            [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
+                                            [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
+
+                                            if (err) {
+                                                [self showDowngradeMessage:err.localizedDescription title:@"获取失败"];
+                                                return;
+                                            }
+                                            [self downgrade_presentVersionSelection:versions trackID:trackId];
+                                        }];
                                     }];
                                 }];
                             }];
@@ -1309,57 +1327,63 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
                                     return;
                                 }
 
-                                [self downgrade_verifyOwnershipWithCompletion:^(BOOL accountReady) {
-                                    if (!accountReady) return;
-                                    [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
-                                    [weakActionsBar setDetail:@"查询信息..." forItemAtIndex:itemIndex];
-                                    [self downgrade_fetchTrackIDWithCompletion:^(long long trackId, NSError *error) {
-                                        if (error || trackId == 0) {
+                                [weakActionsBar showLoadingIndicatorForItemAtIndex:itemIndex];
+                                [weakActionsBar setDetail:@"验证版本..." forItemAtIndex:itemIndex];
+                                dispatch_async(dispatch_get_main_queue(), ^{
+                                    [self downgrade_verifyOwnershipWithCompletion:^(BOOL accountReady) {
+                                        if (!accountReady) {
                                             [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
-                                            [weakActionsBar setDetail:@"获取失败" forItemAtIndex:itemIndex];
-                                            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                                                [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
-                                            });
-                                            [self showDowngradeMessage:error ? error.localizedDescription : @"未知错误" title:@"获取失败"];
+                                            [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
                                             return;
                                         }
-
-                                        [weakActionsBar setDetail:@"验证版本..." forItemAtIndex:itemIndex];
-                                        [self downgrade_fetchVersionsForTrackID:trackId completion:^(NSArray *versions, NSError *err) {
-                                            if (err || ![versions isKindOfClass:[NSArray class]]) {
+                                        [self downgrade_fetchTrackIDWithCompletion:^(long long trackId, NSError *error) {
+                                            if (error || trackId == 0) {
                                                 [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
                                                 [weakActionsBar setDetail:@"获取失败" forItemAtIndex:itemIndex];
                                                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                                                     [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
                                                 });
-                                                [self showDowngradeMessage:err ? err.localizedDescription : @"获取历史版本失败" title:@"验证失败"];
+                                                [self showDowngradeMessage:error ? error.localizedDescription : @"未知错误" title:@"获取失败"];
                                                 return;
                                             }
 
-                                            BOOL found = NO;
-                                            for (NSDictionary *ver in versions) {
-                                                long long extId = [ver[@"versionId"] longLongValue];
-                                                if (extId == versionId) {
-                                                    found = YES;
-                                                    break;
+                                            [weakActionsBar setDetail:@"验证版本..." forItemAtIndex:itemIndex];
+                                            [self downgrade_fetchVersionsForTrackID:trackId completion:^(NSArray *versions, NSError *err) {
+                                                if (err || ![versions isKindOfClass:[NSArray class]]) {
+                                                    [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
+                                                    [weakActionsBar setDetail:@"获取失败" forItemAtIndex:itemIndex];
+                                                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                                                        [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
+                                                    });
+                                                    [self showDowngradeMessage:err ? err.localizedDescription : @"获取历史版本失败" title:@"验证失败"];
+                                                    return;
                                                 }
-                                            }
 
-                                            if (!found) {
+                                                BOOL found = NO;
+                                                for (NSDictionary *ver in versions) {
+                                                    long long extId = [ver[@"versionId"] longLongValue];
+                                                    if (extId == versionId) {
+                                                        found = YES;
+                                                        break;
+                                                    }
+                                                }
+
+                                                if (!found) {
+                                                    [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
+                                                    [weakActionsBar setDetail:@"无效版本" forItemAtIndex:itemIndex];
+                                                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                                                        [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
+                                                    });
+                                                    [self showDowngradeMessage:@"输入的版本号不存在" title:@"无效版本号"];
+                                                    return;
+                                                }
+
+                                                [weakActionsBar setDetail:@"触发下载..." forItemAtIndex:itemIndex];
+                                                [self downgrade_installWithTrackID:trackId versionID:versionId];
                                                 [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
-                                                [weakActionsBar setDetail:@"无效版本" forItemAtIndex:itemIndex];
-                                                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                                                    [weakActionsBar setDetail:@"版本回退" forItemAtIndex:itemIndex];
-                                                });
-                                                [self showDowngradeMessage:@"输入的版本号不存在" title:@"无效版本号"];
-                                                return;
-                                            }
-
-                                            [weakActionsBar setDetail:@"触发下载..." forItemAtIndex:itemIndex];
-                                            [self downgrade_installWithTrackID:trackId versionID:versionId];
-                                            [weakActionsBar hideLoadingIndicatorForItemAtIndex:itemIndex];
-                                            [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
-                                            [self.dataViewController dismissImmediately];
+                                                [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
+                                                [self.dataViewController dismissImmediately];
+                                            }];
                                         }];
                                     }];
                                 }];
