@@ -8,13 +8,13 @@
 # Never overwrite an existing directory, symlink (including a dangling
 # symlink), or anything inside TweakInject.
 if [ "$1" = "configure" ] && \
-   [ -d /var/jb/usr/lib/TweakInject ] && \
-   [ -d /var/jb/Library/MobileSubstrate ] && \
-   [ ! -e /var/jb/Library/MobileSubstrate/DynamicLibraries ] && \
-   [ ! -L /var/jb/Library/MobileSubstrate/DynamicLibraries ]; then
-    # ElleKit's canonical RootHide compatibility link uses the jailbreak-root
-    # target. RootHide resolves it to /var/jb/usr/lib/TweakInject at runtime.
-    ln -s /usr/lib/TweakInject /var/jb/Library/MobileSubstrate/DynamicLibraries || true
+   [ -d /usr/lib/TweakInject ] && \
+   [ -d /Library/MobileSubstrate ] && \
+   [ ! -e /Library/MobileSubstrate/DynamicLibraries ] && \
+   [ ! -L /Library/MobileSubstrate/DynamicLibraries ]; then
+    # RootHide maintainer scripts run inside jbroot, so these are native
+    # jbroot paths. Never add a fixed rootless prefix here.
+    ln -s /usr/lib/TweakInject /Library/MobileSubstrate/DynamicLibraries || true
 fi
 
 exit 0

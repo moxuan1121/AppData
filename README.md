@@ -45,12 +45,12 @@ The package identifier is `com.moxuan.appdata` and it replaces the former
 `com.iosdump.appdata` package. AppData installs only its own injection files in
 ElleKit's native `usr/lib/TweakInject` directory. The package data contains no
 `Library/MobileSubstrate` compatibility path and no ElleKit binary or loader.
-There are no removal scripts. A narrowly scoped `postinst configure` migration
-can restore a completely missing legacy compatibility link after upgrading from
-AppData 1.8.8 or earlier. Because this repository packages explicit RootHide
-paths, that migration checks `/var/jb/usr/lib/TweakInject` and restores the
-matching `/var/jb/Library/MobileSubstrate/DynamicLibraries` entry. It never
-overwrites an existing path or modifies the TweakInject target.
+There are no removal scripts. RootHide packages use native jbroot paths such as
+`/usr/lib/TweakInject` and `/Library/PreferenceBundles`; `/var/jb` is not used
+in the payload. A narrowly scoped `postinst configure` migration can restore a
+completely missing legacy compatibility link after upgrading from AppData 1.8.8
+or earlier. It never overwrites an existing path or modifies the TweakInject
+target.
 
 ## Per-app automatic cache clearing
 

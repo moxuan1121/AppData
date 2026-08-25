@@ -24,23 +24,24 @@ class PackageLifecycleContractTests(unittest.TestCase):
 
     def test_upgrade_recovery_never_overwrites_ellekit_paths(self):
         self.assertIn('[ "$1" = "configure" ]', POSTINST)
-        self.assertIn("[ -d /var/jb/usr/lib/TweakInject ]", POSTINST)
-        self.assertIn("[ ! -e /var/jb/Library/MobileSubstrate/DynamicLibraries ]", POSTINST)
-        self.assertIn("[ ! -L /var/jb/Library/MobileSubstrate/DynamicLibraries ]", POSTINST)
-        self.assertIn("ln -s /usr/lib/TweakInject /var/jb/Library/MobileSubstrate/DynamicLibraries", POSTINST)
-        self.assertNotIn("[ -d /usr/lib/TweakInject ]", POSTINST)
+        self.assertIn("[ -d /usr/lib/TweakInject ]", POSTINST)
+        self.assertIn("[ ! -e /Library/MobileSubstrate/DynamicLibraries ]", POSTINST)
+        self.assertIn("[ ! -L /Library/MobileSubstrate/DynamicLibraries ]", POSTINST)
+        self.assertIn("ln -s /usr/lib/TweakInject /Library/MobileSubstrate/DynamicLibraries", POSTINST)
+        self.assertNotIn("/var/jb", POSTINST)
         self.assertNotIn("ln -sf", POSTINST)
         self.assertNotIn("rm ", POSTINST)
 
     def test_roothide_dependency_and_version_are_explicit(self):
-        self.assertIn("Version: 1.8.11", CONTROL)
+        self.assertIn("Version: 1.8.12", CONTROL)
         self.assertIn("roothide", CONTROL)
         self.assertIn("Architecture: iphoneos-arm", CONTROL)
 
     def test_workflow_rejects_legacy_compatibility_paths(self):
         self.assertIn("Unsafe MobileSubstrate path found in package data", WORKFLOW)
-        self.assertIn("./var/jb/usr/lib/TweakInject/AppData.dylib", WORKFLOW)
-        self.assertIn("./var/jb/usr/lib/TweakInject/AppData.plist", WORKFLOW)
+        self.assertIn("./usr/lib/TweakInject/AppData.dylib", WORKFLOW)
+        self.assertIn("./usr/lib/TweakInject/AppData.plist", WORKFLOW)
+        self.assertIn("Rootless /var/jb payload found in RootHide package", WORKFLOW)
 
 
 if __name__ == "__main__":
