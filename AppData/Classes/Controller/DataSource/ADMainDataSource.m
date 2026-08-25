@@ -1148,6 +1148,10 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
                 [actionsBar.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor].active = YES;
                 [actionsBar.bottomAnchor constraintEqualToAnchor:cell.contentView.bottomAnchor].active = YES;
                 __weak ADActionsBarView *weakActionsBar = actionsBar;
+                // LSApplicationProxy properties can cross into LaunchServices on first
+                // access. Resolve this while the panel is being prepared instead of in
+                // the touch-up handler so tapping Downgrade can present its menu at once.
+                BOOL downgradeAvailable = self.appData.isApplication && [self.appData hasAppStoreApp];
 
                 // 1. Clear Caches
                 ADActionBarBlock clearCacheHandler = ^{
@@ -1247,10 +1251,10 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
                 }
 
                 [actionsBar addItemWithTitle:@"降级应用"
-                                      detail:@"版本回退"
+                                     detail:@"版本回退"
                                        image:downgradeImage
                                      handler:^{
-                    if (self.appData.isApplication && [self.appData hasAppStoreApp]) {
+                    if (downgradeAvailable) {
                         NSInteger itemIndex = 4;
                         UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:@"应用降级"
                                                                                              message:@"请选择降级方式"
@@ -1429,7 +1433,7 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
                     [actionsBar setItemEnabled:NO atIndex:5];
                 }
 
-                if ([self.appData hasAppStoreApp]) {
+                if (downgradeAvailable) {
                     [actionsBar setItemEnabled:YES atIndex:4];
                     [actionsBar setDetail:@"版本回退" forItemAtIndex:4];
                 } else {

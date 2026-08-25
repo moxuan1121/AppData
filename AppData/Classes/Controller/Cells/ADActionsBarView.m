@@ -164,8 +164,13 @@
 - (void)buttonTouchUpInside:(ADActionButton *)button {
     [self setSubviewsOfButton:button highlighted:NO];
     if (button.actionBlock) {
-        [[UISelectionFeedbackGenerator new] selectionChanged];
+        // Run the requested UI action first. Creating the haptic engine lazily can
+        // briefly block the first tap on some devices and used to delay alert/menu
+        // presentation even though the action itself did no synchronous work.
         button.actionBlock();
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [[UISelectionFeedbackGenerator new] selectionChanged];
+        });
     }
 }
 
