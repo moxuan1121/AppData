@@ -1306,7 +1306,7 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
                                         }];
                                     }];
                                 }];
-                            }];
+                            });
                         }]];
 
                         [actionSheet addAction:[UIAlertAction actionWithTitle:@"自定义版本号" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
@@ -1386,7 +1386,7 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
                                             }];
                                         }];
                                     }];
-                                }];
+                                });
                             }]];
 
                             if (IS_IPAD) {
