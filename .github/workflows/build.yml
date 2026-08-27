@@ -135,7 +135,7 @@ jobs:
 
           # Verify package identity and lifecycle safety in the final DEB.
           test "$(dpkg-deb -f AppData-RootHide.deb Package)" = "com.moxuan.appdata"
-          test "$(dpkg-deb -f AppData-RootHide.deb Version)" = "1.8.15"
+          test "$(dpkg-deb -f AppData-RootHide.deb Version)" = "1.8.16"
           test "$(dpkg-deb -f AppData-RootHide.deb Architecture)" = "iphoneos-arm64e"
           verify_dir="$(mktemp -d)"
           dpkg-deb -e AppData-RootHide.deb "$verify_dir"

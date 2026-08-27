@@ -33,7 +33,7 @@ class PackageLifecycleContractTests(unittest.TestCase):
         self.assertNotIn("rm ", POSTINST)
 
     def test_roothide_dependency_and_version_are_explicit(self):
-        self.assertIn("Version: 1.8.15", CONTROL)
+        self.assertIn("Version: 1.8.16", CONTROL)
         self.assertIn("roothide", CONTROL)
         self.assertIn("Architecture: iphoneos-arm", CONTROL)
 

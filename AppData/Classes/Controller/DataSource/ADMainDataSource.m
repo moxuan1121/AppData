@@ -1554,11 +1554,12 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
-    return 25;
+    NSInteger logicalSection = [self logicalSectionForTableView:tableView section:section];
+    return [self titleForHeaderInSection:logicalSection].length > 0 ? 25.0 : CGFLOAT_MIN;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section {
-    return 0;
+    return CGFLOAT_MIN;
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
