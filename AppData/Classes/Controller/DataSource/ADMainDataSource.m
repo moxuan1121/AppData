@@ -1086,10 +1086,15 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
     if (!self.appData) {
         return 0;
     }
-    return 3;
+    return tableView == self.dataViewController.managementTableView ? 1 : 2;
+}
+
+- (NSInteger)logicalSectionForTableView:(UITableView *)tableView section:(NSInteger)section {
+    return tableView == self.dataViewController.managementTableView ? 0 : section + 1;
 }
 
 - (NSInteger)tableView:(nonnull UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    section = [self logicalSectionForTableView:tableView section:section];
     if ([self isContainersSection:section]) {
         NSInteger rows = 0;
         if (self.appData.bundleURL) rows++;
@@ -1114,7 +1119,8 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    if ([self isContainersSection:indexPath.section] || [self isAppGroupsSection:indexPath.section]) {
+    NSInteger section = [self logicalSectionForTableView:tableView section:indexPath.section];
+    if ([self isContainersSection:section] || [self isAppGroupsSection:section]) {
         UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"InfoCellIdentifier"];
         if (!cell) {
             cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"InfoCellIdentifier"];
@@ -1125,7 +1131,7 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
         }
         cell.accessoryView = [ADAppearance.sharedInstance tableCellChevronImageView];
         [ADAppearance applyStylesToCell:cell];
-        if ([self isContainersSection:indexPath.section]) {
+        if ([self isContainersSection:section]) {
             if (indexPath.row == 0) {
                 cell.textLabel.text = @"应用目录";
                 cell.detailTextLabel.text = self.appData.bundleURL.path;
@@ -1133,13 +1139,13 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
                 cell.textLabel.text = @"数据目录";
                 cell.detailTextLabel.text = self.appData.dataContainerURL.path;
             }
-        } else if ([self isAppGroupsSection:indexPath.section]) {
+        } else if ([self isAppGroupsSection:section]) {
             ADAppDataGroup *group = [self.appData.appGroups objectAtIndex:indexPath.row];
             cell.textLabel.text = group.identifier;
             cell.detailTextLabel.text = group.url.path;
         }
         return cell;
-    } else if ([self isManageSection:indexPath.section]) {
+    } else if ([self isManageSection:section]) {
         if (indexPath.row == 0) {
             UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ManageCellIdentifier"];
             if (!cell) {
@@ -1502,7 +1508,8 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
 }
 
 - (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell forRowAtIndexPath:(NSIndexPath *)indexPath {
-    if ([self isManageSection:indexPath.section] && indexPath.row == 0) {
+    NSInteger section = [self logicalSectionForTableView:tableView section:indexPath.section];
+    if ([self isManageSection:section] && indexPath.row == 0) {
         if ([cell respondsToSelector:@selector(setSeparatorInset:)]) {
             [cell setSeparatorInset:UIEdgeInsetsZero];
         }
@@ -1513,7 +1520,7 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
 }
 
 - (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
-    NSString *title = [self titleForHeaderInSection:section];
+    NSString *title = [self titleForHeaderInSection:[self logicalSectionForTableView:tableView section:section]];
     if (title) {
         ADTitleSectionHeaderView *header = [tableView dequeueReusableHeaderFooterViewWithIdentifier:ADTitleSectionHeaderView.reuseIdentifier];
         [header configureHeaderWithTitle:[title uppercaseString]];
@@ -1536,7 +1543,8 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
 #pragma mark - UITableViewDelegate
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    if ([self isManageSection:indexPath.section]) {
+    NSInteger section = [self logicalSectionForTableView:tableView section:indexPath.section];
+    if ([self isManageSection:section]) {
         if (indexPath.row == 0) {
             return 100;
         }
@@ -1555,12 +1563,14 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    if ([self isManageSection:indexPath.section]) {
+    NSInteger section = [self logicalSectionForTableView:tableView section:indexPath.section];
+    if ([self isManageSection:section]) {
         if (indexPath.row == 1) {
             [self.dataViewController switchTableViews];
         }
-    } else if ([self isContainersSection:indexPath.section] || [self isAppGroupsSection:indexPath.section]) {
-        [self didSelectContainerOrAppGroupSectionAtIndexPath:indexPath];
+    } else if ([self isContainersSection:section] || [self isAppGroupsSection:section]) {
+        NSIndexPath *logicalIndexPath = [NSIndexPath indexPathForRow:indexPath.row inSection:section];
+        [self didSelectContainerOrAppGroupSectionAtIndexPath:logicalIndexPath];
     }
 }
 
@@ -1595,7 +1605,8 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
 
 - (void)tableView:(UITableView *)tableView performAction:(SEL)action forRowAtIndexPath:(NSIndexPath *)indexPath withSender:(id)sender {
     if (action == @selector(copy:)) {
-        if ([self isContainersSection:indexPath.section] || [self isAppGroupsSection:indexPath.section]) {
+        NSInteger section = [self logicalSectionForTableView:tableView section:indexPath.section];
+        if ([self isContainersSection:section] || [self isAppGroupsSection:section]) {
             UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
             if (cell.detailTextLabel.text) [[UIPasteboard generalPasteboard] setString:cell.detailTextLabel.text];
         }
@@ -1605,13 +1616,15 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
 #pragma mark - UITableViewDelegate / Context Menu
 
 - (UIContextMenuConfiguration *)tableView:(UITableView *)tableView contextMenuConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath point:(CGPoint)point  API_AVAILABLE(ios(13.0)) {
-    if ([self isContainersSection:indexPath.section] || [self isAppGroupsSection:indexPath.section]) {
+    NSInteger section = [self logicalSectionForTableView:tableView section:indexPath.section];
+    if ([self isContainersSection:section] || [self isAppGroupsSection:section]) {
+        NSIndexPath *logicalIndexPath = [NSIndexPath indexPathForRow:indexPath.row inSection:section];
         UIContextMenuConfiguration *configuration = [UIContextMenuConfiguration configurationWithIdentifier:indexPath
                                                                                           previewProvider:nil
                                                                                            actionProvider:^UIMenu * _Nullable(NSArray<UIMenuElement *> * _Nonnull suggestedActions) {
             NSMutableArray *actions = [NSMutableArray new];
             [actions addObject:[UIAction actionWithTitle:@"在 Filza 中打开" image:nil identifier:@"open-action" handler:^(__kindof UIAction * _Nonnull action) {
-                [self didSelectContainerOrAppGroupSectionAtIndexPath:indexPath];
+                [self didSelectContainerOrAppGroupSectionAtIndexPath:logicalIndexPath];
             }]];
 
             [actions addObject:[UIAction actionWithTitle:@"复制路径" image:nil identifier:@"copy-action" handler:^(__kindof UIAction * _Nonnull action) {
@@ -1619,7 +1632,7 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
                 if (cell.detailTextLabel.text) [[UIPasteboard generalPasteboard] setString:cell.detailTextLabel.text];
             }]];
 
-            if ([self isAppGroupsSection:indexPath.section]) {
+            if ([self isAppGroupsSection:section]) {
                 [actions addObject:[UIAction actionWithTitle:@"复制标识符" image:nil identifier:@"copy-action" handler:^(__kindof UIAction * _Nonnull action) {
                     UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
                     if (cell.textLabel.text) [[UIPasteboard generalPasteboard] setString:cell.textLabel.text];
@@ -1627,10 +1640,10 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
             }
 
             NSString *title = @"";
-            if ([self isContainersSection:indexPath.section]) {
+            if ([self isContainersSection:section]) {
                 if (indexPath.row == 0) title = @"应用目录";
                 else if (indexPath.row == 1) title = @"数据目录";
-            } else if ([self isAppGroupsSection:indexPath.section]) {
+            } else if ([self isAppGroupsSection:section]) {
                 title = @"应用分组";
             }
 
@@ -1646,7 +1659,8 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
     UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
     UIPreviewParameters *parameters = [UIPreviewParameters new];
     parameters.backgroundColor = [UIColor clearColor];
-    if ([self isAppGroupsSection:indexPath.section]) {
+    NSInteger section = [self logicalSectionForTableView:tableView section:indexPath.section];
+    if ([self isAppGroupsSection:section]) {
         return [[UITargetedPreview alloc] initWithView:cell parameters:parameters];
     } else {
         return [[UITargetedPreview alloc] initWithView:cell.detailTextLabel parameters:parameters];

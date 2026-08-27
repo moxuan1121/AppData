@@ -89,6 +89,7 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
 - (instancetype)initWithAppData:(ADAppData *)data {
     if (self = [super init]) {
         ADDataPresentationConfiguration *config = [[ADDataPresentationConfiguration alloc] init];
+        config.screenPercentage = 50.0;
         
         self.presentationManager = [[ADDataPresentationManager alloc] initWithConfiguration:config];
         
@@ -405,7 +406,15 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
     [self.versionLabel.trailingAnchor constraintEqualToAnchor:containerView.trailingAnchor constant:-11].active = YES;
     [self.versionLabel.heightAnchor constraintEqualToConstant:20.16].active = YES;
     
-    // Create Table View
+    // Keep the management actions pinned. Only the container/group list below
+    // this table scrolls, so frequently used actions remain reachable.
+    self.managementTableView = [self createTableViewWithDataSource:self.mainDataSource];
+    self.managementTableView.scrollEnabled = NO;
+    self.managementTableView.showsVerticalScrollIndicator = NO;
+    [self.managementTableView registerClass:ADTitleSectionHeaderView.class forHeaderFooterViewReuseIdentifier:ADTitleSectionHeaderView.reuseIdentifier];
+    [containerView addSubview:self.managementTableView];
+
+    // Create the independently scrolling directory table.
     self.tableView = [self createTableViewWithDataSource:self.mainDataSource];
     [self.tableView registerClass:ADTitleSectionHeaderView.class forHeaderFooterViewReuseIdentifier:ADTitleSectionHeaderView.reuseIdentifier];
     [containerView addSubview:self.tableView];
@@ -436,12 +445,14 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
     [self.appStoreButton setTintColor:secondaryLabelsColor];
     
     self.tableView.separatorColor = [ADAppearance.sharedInstance tableSeparatorColor];
+    self.managementTableView.separatorColor = [ADAppearance.sharedInstance tableSeparatorColor];
     self.moreTableView.separatorColor = [ADAppearance.sharedInstance tableSeparatorColor];
 }
 
 - (void)traitCollectionDidChange:(UITraitCollection *)collection {
     [super traitCollectionDidChange:collection];
     [self.tableView reloadData];
+    [self.managementTableView reloadData];
     [self.moreTableView reloadData];
 }
 
@@ -449,14 +460,23 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
     UITableView *tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleGrouped];
     tableView.showsVerticalScrollIndicator = NO;
     tableView.backgroundColor = [UIColor clearColor];
+    if (@available(iOS 15.0, *)) {
+        tableView.sectionHeaderTopPadding = 0;
+    }
     tableView.delegate = dataSource;
     tableView.dataSource = dataSource;
     return tableView;
 }
 
 - (void)layoutTableViews {
-    CGFloat y = self.iconImageView.frame.origin.y + self.iconImageView.frame.size.height + 15;
-    CGRect frame = CGRectMake(0, y, self.tableView.superview.frame.size.width, self.tableView.superview.frame.size.height - y);
+    CGFloat pinnedY = self.iconImageView.frame.origin.y + self.iconImageView.frame.size.height + 15;
+    CGFloat pinnedHeight = 170.0; // 25pt title + 100pt actions + 45pt More Info
+    CGFloat width = self.tableView.superview.frame.size.width;
+    CGFloat height = self.tableView.superview.frame.size.height;
+    self.managementTableView.frame = CGRectMake(0, pinnedY, width, pinnedHeight);
+
+    CGFloat scrollingY = CGRectGetMaxY(self.managementTableView.frame);
+    CGRect frame = CGRectMake(0, scrollingY, width, MAX(0, height - scrollingY));
     self.tableView.frame = frame;
     self.moreTableView.frame = frame;
 }

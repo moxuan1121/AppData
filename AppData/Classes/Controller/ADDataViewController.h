@@ -11,6 +11,7 @@
 @interface ADDataViewController : UIViewController
 
 @property (nonatomic, strong) UITableView *tableView;
+@property (nonatomic, strong) UITableView *managementTableView;
 @property (nonatomic, strong) UITableView *moreTableView;
 
 @property (nonatomic, assign) BOOL dockDismissed;
