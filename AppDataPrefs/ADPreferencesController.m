@@ -13,6 +13,53 @@
 @interface ADPreferencesInfoViewController : UITableViewController
 @end
 
+@interface ADPanelHeightTableViewCell : UITableViewCell
+@property (nonatomic, strong) UILabel *heightTitleLabel;
+@property (nonatomic, strong) UILabel *heightValueLabel;
+@property (nonatomic, strong) UISlider *heightSlider;
+@end
+
+@implementation ADPanelHeightTableViewCell
+
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
+    if (self = [super initWithStyle:style reuseIdentifier:reuseIdentifier]) {
+        self.selectionStyle = UITableViewCellSelectionStyleNone;
+
+        self.heightTitleLabel = [[UILabel alloc] init];
+        self.heightTitleLabel.text = @"面板高度";
+        self.heightTitleLabel.font = [UIFont systemFontOfSize:16.0];
+        self.heightTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        [self.contentView addSubview:self.heightTitleLabel];
+
+        self.heightValueLabel = [[UILabel alloc] init];
+        self.heightValueLabel.font = [UIFont monospacedDigitSystemFontOfSize:14.0 weight:UIFontWeightRegular];
+        self.heightValueLabel.textAlignment = NSTextAlignmentRight;
+        self.heightValueLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        [self.contentView addSubview:self.heightValueLabel];
+
+        self.heightSlider = [[UISlider alloc] init];
+        self.heightSlider.minimumValue = 35.0;
+        self.heightSlider.maximumValue = 100.0;
+        self.heightSlider.continuous = YES;
+        self.heightSlider.translatesAutoresizingMaskIntoConstraints = NO;
+        [self.contentView addSubview:self.heightSlider];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [self.heightTitleLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:10.0],
+            [self.heightTitleLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16.0],
+            [self.heightValueLabel.centerYAnchor constraintEqualToAnchor:self.heightTitleLabel.centerYAnchor],
+            [self.heightValueLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16.0],
+            [self.heightSlider.topAnchor constraintEqualToAnchor:self.heightTitleLabel.bottomAnchor constant:5.0],
+            [self.heightSlider.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16.0],
+            [self.heightSlider.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16.0],
+            [self.heightSlider.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-8.0]
+        ]];
+    }
+    return self;
+}
+
+@end
+
 @interface ADPreferencesController () <UITableViewDelegate, UITableViewDataSource>
 @property (nonatomic, strong) UITableView *tableView;
 @end
@@ -54,7 +101,7 @@
     switch (section) {
         case 0: return 1;
         case 1: return 2;
-        case 2: return 1;
+        case 2: return 2;
         case 3: return 1;
         case 4: return 3; // 修改点：将开发者区块的行数改为 3
         default: return 0;
@@ -78,13 +125,26 @@
             return cell;
         }
     } else if (indexPath.section == 2) {
-        UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"AppearanceCellIdentifier"];
-        if (!cell) {
-            cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"AppearanceCellIdentifier"];
-            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-            cell.textLabel.text = @"面板外观";
+        if (indexPath.row == 0) {
+            UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"AppearanceCellIdentifier"];
+            if (!cell) {
+                cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:@"AppearanceCellIdentifier"];
+                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+                cell.textLabel.text = @"面板外观";
+            }
+            cell.detailTextLabel.text = [ADSettings titleForAppearanceStyle:[ADSettings integerForKey:kAppearance]];
+            return cell;
         }
-        cell.detailTextLabel.text = [ADSettings titleForAppearanceStyle:[ADSettings integerForKey:kAppearance]];
+
+        ADPanelHeightTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PanelHeightCellIdentifier"];
+        if (!cell) {
+            cell = [[ADPanelHeightTableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"PanelHeightCellIdentifier"];
+        }
+        NSInteger percentage = [ADSettings panelHeightPercentage];
+        cell.heightSlider.value = percentage;
+        cell.heightValueLabel.text = [NSString stringWithFormat:@"%ld%%", (long)percentage];
+        [cell.heightSlider removeTarget:self action:@selector(panelHeightSliderChanged:) forControlEvents:UIControlEventValueChanged];
+        [cell.heightSlider addTarget:self action:@selector(panelHeightSliderChanged:) forControlEvents:UIControlEventValueChanged];
         return cell;
     } else if (indexPath.section == 3) {
         UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"InfoCellIdentifier"];
@@ -118,7 +178,7 @@
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     switch (section) {
         case 1: return @"激活方式";
-        case 2: return nil;
+        case 2: return @"面板显示";
         case 4: return @"开发者";
         default: return nil;
     }
@@ -127,6 +187,7 @@
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     switch (section) {
         case 1: return @"可以通过向上滑动应用图标，或者点击重按图标弹出的菜单中的按钮来激活 AppData 面板。";
+        case 2: return @"面板高度范围为屏幕的 35%–100%，默认 50%。调整后会在下一次打开面板时生效。";
         default: return nil;
     }
 }
@@ -136,13 +197,14 @@
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
     switch (indexPath.section) {
         case 1: return ADSwitchTableViewCell.height;
+        case 2: return indexPath.row == 1 ? 76.0 : UITableViewAutomaticDimension;
         default: return UITableViewAutomaticDimension;
     }
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    if (indexPath.section == 2) {
+    if (indexPath.section == 2 && indexPath.row == 0) {
         UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
         
         UITableViewStyle style = UITableViewStyleGrouped;
@@ -172,6 +234,19 @@
             [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://t.me/iosdumpzzz"] options:@{} completionHandler:nil];
         }
     }
+}
+
+- (void)panelHeightSliderChanged:(UISlider *)slider {
+    NSInteger percentage = (NSInteger)(slider.value + 0.5f);
+    slider.value = percentage;
+    [ADSettings setInteger:percentage forKey:kPanelHeightPercentage];
+
+    UIView *view = slider;
+    while (view && ![view isKindOfClass:ADPanelHeightTableViewCell.class]) {
+        view = view.superview;
+    }
+    ADPanelHeightTableViewCell *cell = (ADPanelHeightTableViewCell *)view;
+    cell.heightValueLabel.text = [NSString stringWithFormat:@"%ld%%", (long)percentage];
 }
 
 @end

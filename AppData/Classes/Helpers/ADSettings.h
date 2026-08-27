@@ -12,6 +12,7 @@
 #define kSwipeUpEnabled                                     @"SwipeUpEnabled"
 #define kForceTouchMenuEnabled                              @"ForceTouchMenuEnabled"
 #define kAppearance                                         @"kAppearance"
+#define kPanelHeightPercentage                              @"PanelHeightPercentage"
 
 #define kBlockedFromLaunchingSafariPrefix                   @"IsBlockedFromLaunchingSafari"
 #define kBlockedFromLaunchingAppStorePrefix                 @"IsBlockedFromLaunchingAppStore"
@@ -39,6 +40,9 @@
 #pragma mark - Activation
 + (BOOL)swipeUpEnabled;
 + (BOOL)forceTouchMenuEnabled;
+
+#pragma mark - Panel Layout
++ (NSInteger)panelHeightPercentage;
 
 #pragma mark - App Launch Control
 + (BOOL)isBlockedFromLaunchingOtherApplications:(NSString *)bundleIdentifier;

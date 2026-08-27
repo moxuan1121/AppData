@@ -68,24 +68,6 @@ static SBIconImageView *ADFindIconImageView(UIView *view, NSUInteger depth) {
     return nil;
 }
 
-static CGFloat ADDynamicPanelHeightForAppData(ADAppData *appData) {
-    // App preview (88pt) + management area (170pt).
-    CGFloat height = 258.0;
-
-    NSInteger containerRows = 0;
-    if (appData.bundleURL) containerRows++;
-    if (appData.dataContainerURL) containerRows++;
-    if (appData.isApplication) height += 25.0;
-    height += containerRows * 50.0;
-
-    NSInteger appGroupRows = appData.appGroups.count;
-    if (appGroupRows > 0) {
-        height += 25.0;
-        height += appGroupRows * 50.0;
-    }
-    return height;
-}
-
 @implementation ADDataViewController
 
 static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
@@ -107,15 +89,7 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
 - (instancetype)initWithAppData:(ADAppData *)data {
     if (self = [super init]) {
         ADDataPresentationConfiguration *config = [[ADDataPresentationConfiguration alloc] init];
-        CGFloat desiredPanelHeight = ADDynamicPanelHeightForAppData(data);
-        config.customFrameHandler = ^CGRect(UIView *containerView) {
-            CGRect bounds = containerView.bounds;
-            CGFloat panelHeight = MIN(desiredPanelHeight, CGRectGetHeight(bounds));
-            return CGRectMake(CGRectGetMinX(bounds),
-                              CGRectGetMaxY(bounds) - panelHeight,
-                              CGRectGetWidth(bounds),
-                              panelHeight);
-        };
+        config.screenPercentage = [ADSettings panelHeightPercentage];
         
         self.presentationManager = [[ADDataPresentationManager alloc] initWithConfiguration:config];
         
@@ -440,12 +414,9 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
     [self.managementTableView registerClass:ADTitleSectionHeaderView.class forHeaderFooterViewReuseIdentifier:ADTitleSectionHeaderView.reuseIdentifier];
     [containerView addSubview:self.managementTableView];
 
-    // The panel height is derived from these rows, so the directory list is
-    // presented in full and does not need an independent scrolling gesture.
+    // Keep the 1.8.15 layout: management controls stay pinned while the
+    // directory and App Groups list below can scroll independently.
     self.tableView = [self createTableViewWithDataSource:self.mainDataSource];
-    self.tableView.scrollEnabled = NO;
-    self.tableView.bounces = NO;
-    self.tableView.showsVerticalScrollIndicator = NO;
     [self.tableView registerClass:ADTitleSectionHeaderView.class forHeaderFooterViewReuseIdentifier:ADTitleSectionHeaderView.reuseIdentifier];
     [containerView addSubview:self.tableView];
     

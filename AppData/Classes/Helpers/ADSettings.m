@@ -39,7 +39,8 @@
     return @{
         kSwipeUpEnabled:            @(YES),
         kForceTouchMenuEnabled:     @(NO),
-        kAppearance:                @(ADAppearanceStyleDark)
+        kAppearance:                @(ADAppearanceStyleDark),
+        kPanelHeightPercentage:     @(50)
     };
 }
 
@@ -71,6 +72,13 @@
 
 + (BOOL)forceTouchMenuEnabled {
     return [self boolForKey:kForceTouchMenuEnabled];
+}
+
+#pragma mark - Panel Layout
+
++ (NSInteger)panelHeightPercentage {
+    NSInteger percentage = [self integerForKey:kPanelHeightPercentage];
+    return MIN(100, MAX(35, percentage));
 }
 
 #pragma mark - Appearance
