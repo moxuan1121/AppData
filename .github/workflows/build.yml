@@ -112,8 +112,10 @@ jobs:
             OTHER_LDFLAGS="-undefined dynamic_lookup -rpath /Library/Frameworks -rpath @loader_path/.jbroot/Library/Frameworks" \
             -quiet build
 
-      - name: Pseudo-sign Binaries (ldid)
+      - name: Strip and Pseudo-sign Binaries
         run: |
+          xcrun strip -S -x build/Release-iphoneos/AppData.dylib
+          xcrun strip -S -x build/Release-iphoneos/AppDataPrefs.bundle/AppDataPrefs
           ldid -S build/Release-iphoneos/AppData.dylib
           ldid -S build/Release-iphoneos/AppDataPrefs.bundle/AppDataPrefs
 
