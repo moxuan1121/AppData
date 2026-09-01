@@ -84,30 +84,15 @@
 #pragma mark - Appearance
 
 + (ADAppearanceStyle)appearanceStyle {
-    ADAppearanceStyle currentValue = [ADSettings integerForKey:kAppearance];
-    if (@available(iOS 13.0, *)) { } else { // iOS 12 or older
-        if (currentValue == ADAppearanceStyleAutomatic) {
-            [ADSettings setInteger:ADAppearanceStyleDark forKey:kAppearance];
-            return ADAppearanceStyleDark;
-        }
-    }
-    return currentValue;
+    return [ADSettings integerForKey:kAppearance];
 }
 
 + (NSArray <NSString *> *)appearanceValues {
-    if (@available(iOS 13.0, *)) {
-        return @[[NSString stringWithFormat:@"%td",ADAppearanceStyleDark], [NSString stringWithFormat:@"%td",ADAppearanceStyleLight], [NSString stringWithFormat:@"%td",ADAppearanceStyleAutomatic]];
-    } else {
-        return @[[NSString stringWithFormat:@"%td",ADAppearanceStyleDark], [NSString stringWithFormat:@"%td",ADAppearanceStyleLight]];
-    }
+    return @[[NSString stringWithFormat:@"%td",ADAppearanceStyleDark], [NSString stringWithFormat:@"%td",ADAppearanceStyleLight], [NSString stringWithFormat:@"%td",ADAppearanceStyleAutomatic]];
 }
 
 + (NSArray <NSString *> *)appearanceTitles {
-    if (@available(iOS 13.0, *)) {
-        return @[[self titleForAppearanceStyle:ADAppearanceStyleDark], [self titleForAppearanceStyle:ADAppearanceStyleLight], [self titleForAppearanceStyle:ADAppearanceStyleAutomatic]];
-    } else {
-        return @[[self titleForAppearanceStyle:ADAppearanceStyleDark], [self titleForAppearanceStyle:ADAppearanceStyleLight]];
-    }
+    return @[[self titleForAppearanceStyle:ADAppearanceStyleDark], [self titleForAppearanceStyle:ADAppearanceStyleLight], [self titleForAppearanceStyle:ADAppearanceStyleAutomatic]];
 }
 
 + (NSString *)titleForAppearanceStyle:(ADAppearanceStyle)style {

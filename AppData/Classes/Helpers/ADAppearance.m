@@ -35,9 +35,7 @@
 
 - (BOOL)isDarkStyle {
     if (self.currentStyle == ADAppearanceStyleAutomatic) {
-        if (@available(iOS 13.0, *)) {
-            return [UITraitCollection currentTraitCollection].userInterfaceStyle == UIUserInterfaceStyleDark;
-        }
+        return [UITraitCollection currentTraitCollection].userInterfaceStyle == UIUserInterfaceStyleDark;
     }
     return self.currentStyle == ADAppearanceStyleDark;
 }
@@ -48,11 +46,7 @@
     if (self.isDarkStyle) {
         return UIBlurEffectStyleDark;
     } else {
-        if (@available(iOS 13.0, *)) {
-            return UIBlurEffectStyleSystemThinMaterialLight;
-        } else {
-            return UIBlurEffectStyleLight;
-        }
+        return UIBlurEffectStyleSystemThinMaterialLight;
     }
 }
 
@@ -102,12 +96,7 @@
 }
 
 - (UIActivityIndicatorView *)activityIndicatorView {
-    UIActivityIndicatorView *activityIndicatorView = nil;
-    if (@available(iOS 13.0, *)) {
-        activityIndicatorView = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
-    } else {
-        activityIndicatorView = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhite];
-    }
+    UIActivityIndicatorView *activityIndicatorView = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     activityIndicatorView.color = [self secondaryTextColor];
     return activityIndicatorView;
 }

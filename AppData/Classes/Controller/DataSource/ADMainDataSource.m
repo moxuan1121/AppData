@@ -244,13 +244,11 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
         }];
     UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:picker];
     navigationController.modalPresentationStyle = UIModalPresentationPageSheet;
-    if (@available(iOS 15.0, *)) {
-        navigationController.sheetPresentationController.detents = @[
-            UISheetPresentationControllerDetent.mediumDetent,
-            UISheetPresentationControllerDetent.largeDetent
-        ];
-        navigationController.sheetPresentationController.prefersGrabberVisible = YES;
-    }
+    navigationController.sheetPresentationController.detents = @[
+        UISheetPresentationControllerDetent.mediumDetent,
+        UISheetPresentationControllerDetent.largeDetent
+    ];
+    navigationController.sheetPresentationController.prefersGrabberVisible = YES;
     [self.dataViewController presentViewController:navigationController animated:YES completion:nil];
 }
 
@@ -1256,13 +1254,7 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
                 }];
 
                 // 4. Downgrade App
-                UIImage *downgradeImage = nil;
-                if (@available(iOS 13.0, *)) {
-                    downgradeImage = [UIImage systemImageNamed:@"arrow.down.circle"];
-                }
-                if (!downgradeImage) {
-                    downgradeImage = [ADHelper imageNamed:@"ClearData"];
-                }
+                UIImage *downgradeImage = [UIImage systemImageNamed:@"arrow.down.circle"];
 
                 [actionsBar addItemWithTitle:@"降级应用"
                                      detail:@"版本回退"
@@ -1442,11 +1434,7 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
                 [actionsBar insertArrangedSubview:uninstallItem atIndex:3];
 
                 // 6. Redirect / per-app launch control (tap and long press use the same menu).
-                UIImage *redirectImage = nil;
-                if (@available(iOS 13.0, *)) {
-                    redirectImage = [UIImage systemImageNamed:@"arrow.left.arrow.right.circle"];
-                }
-                if (!redirectImage) redirectImage = [ADHelper imageNamed:@"ResetPermissions"];
+                UIImage *redirectImage = [UIImage systemImageNamed:@"arrow.left.arrow.right.circle"];
                 NSInteger launchControlIndex = 5;
                 ADActionBarBlock launchControlHandler = ^{
                     [self showLaunchControlMenuWithActionsBar:weakActionsBar itemIndex:launchControlIndex];

@@ -23,12 +23,7 @@
     [super viewDidLoad];
     
     // 实现四个角圆圆的卡片风格
-    UITableViewStyle style = UITableViewStyleGrouped;
-    if (@available(iOS 13.0, *)) {
-        style = UITableViewStyleInsetGrouped; // iOS 13+ 的圆角分组样式
-    }
-    
-    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:style];
+    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
     self.tableView.delegate = self;
     self.tableView.dataSource = self;
     [self.view addSubview:self.tableView];
@@ -164,12 +159,7 @@
     if (indexPath.section == 2 && indexPath.row == 0) {
         UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
         
-        UITableViewStyle style = UITableViewStyleGrouped;
-        if (@available(iOS 13.0, *)) {
-            style = UITableViewStyleInsetGrouped;
-        }
-        
-        ADSelectListTableViewController *listController = [[ADSelectListTableViewController alloc] initWithStyle:style
+        ADSelectListTableViewController *listController = [[ADSelectListTableViewController alloc] initWithStyle:UITableViewStyleInsetGrouped
                                                                                                        title:@"面板外观"
                                                                                                        items:[ADSettings appearanceTitles]
                                                                                                       values:[ADSettings appearanceValues]
@@ -208,11 +198,7 @@
 @implementation ADPreferencesInfoViewController
 
 - (instancetype)initWithStyle:(UITableViewStyle)style {
-    UITableViewStyle insetStyle = UITableViewStyleGrouped;
-    if (@available(iOS 13.0, *)) {
-        insetStyle = UITableViewStyleInsetGrouped; // 圆角
-    }
-    if (self = [super initWithStyle:insetStyle]) {
+    if (self = [super initWithStyle:UITableViewStyleInsetGrouped]) {
         self.title = @"使用说明";
     }
     return self;

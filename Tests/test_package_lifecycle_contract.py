@@ -34,8 +34,15 @@ class PackageLifecycleContractTests(unittest.TestCase):
 
     def test_roothide_dependency_and_version_are_explicit(self):
         self.assertIn("Version: 1.8.17", CONTROL)
+        self.assertIn("firmware (>= 15.0)", CONTROL)
+        self.assertIn("firmware (<< 16.0)", CONTROL)
         self.assertIn("roothide", CONTROL)
         self.assertIn("Architecture: iphoneos-arm", CONTROL)
+
+    def test_pre_ios_15_resources_are_not_packaged(self):
+        resources = PACKAGE / "Library" / "Application Support" / "AppData" / "Resources.bundle"
+        self.assertFalse(any(resources.glob("AppDataIcon12*")))
+        self.assertFalse(any(resources.glob("ClipboardButton*")))
 
     def test_workflow_rejects_legacy_compatibility_paths(self):
         self.assertIn("Unsafe MobileSubstrate path found in package data", WORKFLOW)

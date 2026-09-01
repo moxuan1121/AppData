@@ -44,11 +44,16 @@ class IconActivationContractTests(unittest.TestCase):
         self.assertNotIn("scrollView.scrollEnabled = NO", CONTROLLER)
 
     def test_folder_close_does_not_run_icon_view_lifecycle_hooks(self):
-        modern_group = TWEAK[TWEAK.index("%group IOS13_AND_NEWER_HOOKS"):]
+        modern_group = TWEAK[TWEAK.index("%group IOS15_HOOKS"):]
         self.assertNotIn("- (void)didMoveToSuperview", modern_group)
         self.assertNotIn("- (void)layoutSubviews", modern_group)
         self.assertNotIn("- (void)dealloc", modern_group)
         self.assertNotIn("dispatch_async(dispatch_get_main_queue()", modern_group)
+
+    def test_pre_ios_15_hooks_are_not_compiled(self):
+        self.assertIn("%init(IOS15_HOOKS);", TWEAK)
+        self.assertNotIn("IOS12_AND_OLDER_HOOKS", TWEAK)
+        self.assertNotIn("SBUIAppIconForceTouchController", TWEAK + HEADERS)
 
 
 if __name__ == "__main__":

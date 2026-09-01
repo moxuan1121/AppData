@@ -53,7 +53,6 @@
 @property (nonatomic,readonly) NSNumber * ODRDiskUsage;
 @property (getter=isAppStoreVendable,nonatomic,readonly) BOOL appStoreVendable;
 @property (getter=isDeletable,nonatomic,readonly) BOOL deletable;
-// iOS 13
 @property (nonatomic,readonly) NSSet *claimedDocumentContentTypes;
 @property (nonatomic,readonly) NSSet *claimedURLSchemes;
 @end
@@ -84,7 +83,6 @@
 @interface SBIcon : NSObject
 - (NSString *)applicationBundleID;
 - (NSString *)applicationBundleIdentifier;
-// iOS 15+ 兼容
 - (SBApplication *)application;
 @end
 
@@ -95,7 +93,7 @@
 @property (nonatomic, retain) SBIcon *icon;
 @property (nonatomic, retain) SBFolderIcon * folderIcon;
 - (id)_iconImageView;
-- (id)iconImageView; // iOS 15+ 兼容
+- (id)iconImageView; // iOS 15 私有接口
 - (BOOL)ad_isSupportedIcon;
 @end
 
@@ -131,15 +129,6 @@
 @interface SBIconController : NSObject
 + (instancetype)sharedInstance;
 @property (nonatomic,readonly) SBFloatingDockController * floatingDockController;
-@end
-
-@interface SBUIAppIconForceTouchControllerDataProvider : NSObject
-@property (nonatomic,readonly) NSString * applicationBundleIdentifier;
-@property (nonatomic,readonly) UIGestureRecognizer *gestureRecognizer;
-@end
-
-@interface SBUIAppIconForceTouchController : NSObject
-- (void)dismissAnimated:(BOOL)arg1 withCompletionHandler:(/*^block*/id)arg2;
 @end
 
 //CoreLocation

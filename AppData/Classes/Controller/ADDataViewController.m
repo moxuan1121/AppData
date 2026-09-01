@@ -81,9 +81,7 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
     self.iconImageView.contentMode = UIViewContentModeScaleAspectFill;
     self.iconImageView.layer.cornerRadius = ADIconContinuousCornerRadiusForSide(58.0);
 
-    if (@available(iOS 13.0, *)) {
-        self.iconImageView.layer.cornerCurve = kCACornerCurveContinuous;
-    }
+    self.iconImageView.layer.cornerCurve = kCACornerCurveContinuous;
 }
 
 - (instancetype)initWithAppData:(ADAppData *)data {
@@ -116,7 +114,7 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
         return;
     }
     
-    // Find Icon Image View (iOS 15/16+ 兼容)
+    // Find Icon Image View (iOS 15)
     SBIconImageView *_iconImageView = nil;
     if ([iconView respondsToSelector:@selector(iconImageView)]) {
         _iconImageView = [iconView performSelector:@selector(iconImageView)];
@@ -138,7 +136,7 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
 + (void)presentControllerFromSBIconImageView:(SBIconImageView *)iconImageView iconView:(SBIconView *)iconView fromContextMenu:(BOOL)contextMenu {
     NSLog(@"iconImageView: %@", iconImageView);
     
-    // 获取 RootController，增强 iOS 15/16 兼容性
+    // 获取 RootController，兼容 iOS 15 的不同图标视图
     UIViewController *rootController = nil;
     if ([iconImageView respondsToSelector:@selector(_viewControllerForAncestor)]) {
         rootController = [iconImageView _viewControllerForAncestor];
@@ -158,7 +156,7 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
     
     NSLog(@"rootController: %@", rootController);
     
-    // iOS 15+ 兼容新的 BundleID 提取逻辑
+    // iOS 15 BundleID 提取逻辑
     if ([iconView respondsToSelector:@selector(icon)]) {
         SBIcon *icon = iconView.icon;
         NSString *bundleID = ADBundleIdentifierForIcon(icon);
@@ -377,13 +375,8 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
     [self.identifierLabel.heightAnchor constraintEqualToConstant:20.16].active = YES;
     [self.identifierLabel.trailingAnchor constraintLessThanOrEqualToAnchor:containerView.trailingAnchor constant:-(22 + 11)].active = YES;
 
-    UIImage *clipboardImage = nil;
-    if (@available(iOS 13.0, *)) {
-        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithWeight:UIImageSymbolWeightBold];
-        clipboardImage = [[UIImage systemImageNamed:@"doc.on.clipboard" withConfiguration:config] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-    } else {
-        clipboardImage = [[ADHelper imageNamed:@"ClipboardButton"] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-    }
+    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithWeight:UIImageSymbolWeightBold];
+    UIImage *clipboardImage = [[UIImage systemImageNamed:@"doc.on.clipboard" withConfiguration:config] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
     self.identifierCopyButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.identifierCopyButton setImage:clipboardImage forState:UIControlStateNormal];
     [self.identifierCopyButton addTarget:self action:@selector(didTapIdentifierButton:) forControlEvents:UIControlEventTouchUpInside];
@@ -460,9 +453,7 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
     UITableView *tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleGrouped];
     tableView.showsVerticalScrollIndicator = NO;
     tableView.backgroundColor = [UIColor clearColor];
-    if (@available(iOS 15.0, *)) {
-        tableView.sectionHeaderTopPadding = 0;
-    }
+    tableView.sectionHeaderTopPadding = 0;
     tableView.delegate = dataSource;
     tableView.dataSource = dataSource;
     return tableView;

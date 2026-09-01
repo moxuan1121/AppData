@@ -28,12 +28,7 @@ void SBSApplicationTerminationAssertionInvalidate(SBSApplicationTerminationAsser
 
 __attribute__((constructor))
 static void initializeFunctions() {
-    void *handle = NULL;
-    if (@available(iOS 13, *)) {
-        handle = dlopen("/System/Library/PrivateFrameworks/SpringBoard.framework/SpringBoard", RTLD_LAZY);
-    } else {
-        handle = dlopen("/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices", RTLD_LAZY);
-    }
+    void *handle = dlopen("/System/Library/PrivateFrameworks/SpringBoard.framework/SpringBoard", RTLD_LAZY);
     
     if (handle) {
         SBSApplicationTerminationAssertionCreateWithError_Ptr = dlsym(handle, "SBSApplicationTerminationAssertionCreateWithError");

@@ -46,11 +46,7 @@
     self.detailLabel = [[UILabel alloc] init];
     self.detailLabel.textAlignment = NSTextAlignmentCenter;
     self.detailLabel.font = [UIFont systemFontOfSize:15];
-    if (@available(iOS 13.0, *)) {
-        self.detailLabel.textColor = [UIColor secondaryLabelColor];
-    } else {
-        self.detailLabel.textColor = [UIColor grayColor];
-    }
+    self.detailLabel.textColor = [UIColor secondaryLabelColor];
     [self.contentView addSubview:self.detailLabel];
     
     self.detailLabel.translatesAutoresizingMaskIntoConstraints = NO;

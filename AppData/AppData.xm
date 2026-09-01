@@ -191,7 +191,7 @@ static SBIconView *ADApplicationIconViewForImageView(UIView *imageView) {
 
 #pragma mark - ForceTouch Menu
 
-%group IOS13_AND_NEWER_HOOKS
+%group IOS15_HOOKS
 
 %hook SBIconView
 
@@ -253,46 +253,7 @@ static SBIconView *ADApplicationIconViewForImageView(UIView *imageView) {
 
 %end
 
-%end // IOS13_AND_NEWER_HOOKS
-
-
-%group IOS12_AND_OLDER_HOOKS
-
-%hook SBUIAppIconForceTouchControllerDataProvider
-
-- (id)applicationShortcutItems {
-    if ([ADSettings forceTouchMenuEnabled]) {
-        NSArray *originalItems = %orig;
-        NSMutableArray *newItems = [NSMutableArray arrayWithArray:originalItems ?: @[]];
-        SBSApplicationShortcutItem *shortcutItem = [ADHelper applicationShortcutItem];
-        if (shortcutItem) {
-            [newItems insertObject:shortcutItem atIndex:0];
-        }
-        return newItems;
-    }
-    return %orig;
-}
-
-%end
-
-%hook SBUIAppIconForceTouchController
-
-- (void)appIconForceTouchShortcutViewController:(id)arg1 activateApplicationShortcutItem:(SBSApplicationShortcutItem *)item {
-    if ([item.type isEqualToString:kSBApplicationShortcutItemType]) {
-        [self dismissAnimated:YES withCompletionHandler:nil];
-        SBUIAppIconForceTouchControllerDataProvider* _dataProvider = [self valueForKey:@"_dataProvider"];
-        SBIconView *iconView = (SBIconView *)_dataProvider.gestureRecognizer.view;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.2 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-            [ADDataViewController presentControllerFromSBIconView:iconView fromContextMenu:YES];
-        });
-    } else {
-        %orig;
-    }
-}
-
-%end
-
-%end // IOS12_AND_OLDER_HOOKS
+%end // IOS15_HOOKS
 
 
 #pragma mark - Redirect / Cross-App Launch Control
@@ -365,9 +326,5 @@ static SBIconView *ADApplicationIconViewForImageView(UIView *imageView) {
 %ctor {
     %init(SHARED_HOOKS);
     %init(APP_LAUNCH_CONTROL_HOOKS);
-    if (@available(iOS 13, *)) {
-        %init(IOS13_AND_NEWER_HOOKS);
-    } else {
-        %init(IOS12_AND_OLDER_HOOKS);
-    }
+    %init(IOS15_HOOKS);
 }
