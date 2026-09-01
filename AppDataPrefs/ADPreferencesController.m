@@ -13,53 +13,6 @@
 @interface ADPreferencesInfoViewController : UITableViewController
 @end
 
-@interface ADPanelHeightTableViewCell : UITableViewCell
-@property (nonatomic, strong) UILabel *heightTitleLabel;
-@property (nonatomic, strong) UILabel *heightValueLabel;
-@property (nonatomic, strong) UISlider *heightSlider;
-@end
-
-@implementation ADPanelHeightTableViewCell
-
-- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
-    if (self = [super initWithStyle:style reuseIdentifier:reuseIdentifier]) {
-        self.selectionStyle = UITableViewCellSelectionStyleNone;
-
-        self.heightTitleLabel = [[UILabel alloc] init];
-        self.heightTitleLabel.text = @"面板高度";
-        self.heightTitleLabel.font = [UIFont systemFontOfSize:16.0];
-        self.heightTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        [self.contentView addSubview:self.heightTitleLabel];
-
-        self.heightValueLabel = [[UILabel alloc] init];
-        self.heightValueLabel.font = [UIFont monospacedDigitSystemFontOfSize:14.0 weight:UIFontWeightRegular];
-        self.heightValueLabel.textAlignment = NSTextAlignmentRight;
-        self.heightValueLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        [self.contentView addSubview:self.heightValueLabel];
-
-        self.heightSlider = [[UISlider alloc] init];
-        self.heightSlider.minimumValue = 35.0;
-        self.heightSlider.maximumValue = 100.0;
-        self.heightSlider.continuous = YES;
-        self.heightSlider.translatesAutoresizingMaskIntoConstraints = NO;
-        [self.contentView addSubview:self.heightSlider];
-
-        [NSLayoutConstraint activateConstraints:@[
-            [self.heightTitleLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:10.0],
-            [self.heightTitleLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16.0],
-            [self.heightValueLabel.centerYAnchor constraintEqualToAnchor:self.heightTitleLabel.centerYAnchor],
-            [self.heightValueLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16.0],
-            [self.heightSlider.topAnchor constraintEqualToAnchor:self.heightTitleLabel.bottomAnchor constant:5.0],
-            [self.heightSlider.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16.0],
-            [self.heightSlider.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16.0],
-            [self.heightSlider.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-8.0]
-        ]];
-    }
-    return self;
-}
-
-@end
-
 @interface ADPreferencesController () <UITableViewDelegate, UITableViewDataSource>
 @property (nonatomic, strong) UITableView *tableView;
 @end
@@ -136,15 +89,20 @@
             return cell;
         }
 
-        ADPanelHeightTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PanelHeightCellIdentifier"];
+        UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PanelHeightCellIdentifier"];
         if (!cell) {
-            cell = [[ADPanelHeightTableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"PanelHeightCellIdentifier"];
+            cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"PanelHeightCellIdentifier"];
+            UISlider *slider = [[UISlider alloc] initWithFrame:CGRectMake(0, 0, 170, 44)];
+            slider.minimumValue = 35.0;
+            slider.maximumValue = 100.0;
+            slider.accessibilityLabel = @"面板高度";
+            [slider addTarget:self action:@selector(panelHeightSliderChanged:) forControlEvents:UIControlEventValueChanged];
+            cell.accessoryView = slider;
+            cell.selectionStyle = UITableViewCellSelectionStyleNone;
         }
         NSInteger percentage = [ADSettings panelHeightPercentage];
-        cell.heightSlider.value = percentage;
-        cell.heightValueLabel.text = [NSString stringWithFormat:@"%ld%%", (long)percentage];
-        [cell.heightSlider removeTarget:self action:@selector(panelHeightSliderChanged:) forControlEvents:UIControlEventValueChanged];
-        [cell.heightSlider addTarget:self action:@selector(panelHeightSliderChanged:) forControlEvents:UIControlEventValueChanged];
+        cell.textLabel.text = [NSString stringWithFormat:@"面板高度 %ld%%", (long)percentage];
+        ((UISlider *)cell.accessoryView).value = percentage;
         return cell;
     } else if (indexPath.section == 3) {
         UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"InfoCellIdentifier"];
@@ -197,7 +155,6 @@
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
     switch (indexPath.section) {
         case 1: return ADSwitchTableViewCell.height;
-        case 2: return indexPath.row == 1 ? 76.0 : UITableViewAutomaticDimension;
         default: return UITableViewAutomaticDimension;
     }
 }
@@ -241,12 +198,9 @@
     slider.value = percentage;
     [ADSettings setInteger:percentage forKey:kPanelHeightPercentage];
 
-    UIView *view = slider;
-    while (view && ![view isKindOfClass:ADPanelHeightTableViewCell.class]) {
-        view = view.superview;
-    }
-    ADPanelHeightTableViewCell *cell = (ADPanelHeightTableViewCell *)view;
-    cell.heightValueLabel.text = [NSString stringWithFormat:@"%ld%%", (long)percentage];
+    UITableViewCell *cell = (UITableViewCell *)slider.superview;
+    while (cell && ![cell isKindOfClass:UITableViewCell.class]) cell = (UITableViewCell *)cell.superview;
+    cell.textLabel.text = [NSString stringWithFormat:@"面板高度 %ld%%", (long)percentage];
 }
 
 @end

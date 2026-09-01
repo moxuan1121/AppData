@@ -32,6 +32,7 @@ class PinnedPanelLayoutContractTests(unittest.TestCase):
         self.assertIn("minimumValue = 35.0", PREFERENCES)
         self.assertIn("maximumValue = 100.0", PREFERENCES)
         self.assertIn("panelHeightSliderChanged:", PREFERENCES)
+        self.assertNotIn("ADPanelHeightTableViewCell", PREFERENCES)
 
 
 if __name__ == "__main__":
