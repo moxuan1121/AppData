@@ -131,7 +131,7 @@ jobs:
           sed -i '' 's/Architecture: iphoneos-arm/Architecture: iphoneos-arm64e/g' Package_RootHide/DEBIAN/control
           chmod 0755 Package_RootHide/DEBIAN/postinst
           
-          dpkg-deb -Zgzip -b Package_RootHide AppData-RootHide.deb
+          dpkg-deb -Zgzip --root-owner-group -b Package_RootHide AppData-RootHide.deb
 
           # Verify package identity and lifecycle safety in the final DEB.
           test "$(dpkg-deb -f AppData-RootHide.deb Package)" = "com.moxuan.appdata"
