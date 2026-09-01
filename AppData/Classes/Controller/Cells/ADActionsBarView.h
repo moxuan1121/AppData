@@ -15,7 +15,6 @@ typedef void(^ADActionBarBlock)(void);
 - (void)addItemWithTitle:(NSString *)title detail:(NSString *)detail image:(UIImage *)image handler:(ADActionBarBlock)handler;
 - (void)addItemWithTitle:(NSString *)title detail:(NSString *)detail image:(UIImage *)image handler:(ADActionBarBlock)handler longPressHandler:(ADActionBarBlock)longPressHandler;
 
-- (void)setTitle:(NSString *)title forItemAtIndex:(NSInteger)index;
 - (void)setDetail:(NSString *)detail forItemAtIndex:(NSInteger)index;
 
 - (void)hideLoadingIndicatorForItemAtIndex:(NSInteger)index;

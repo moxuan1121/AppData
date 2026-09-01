@@ -18,13 +18,6 @@
     return self;
 }
 
-- (instancetype)init {
-    if (self = [super init]) {
-        self.configuration = [[ADDataPresentationConfiguration alloc] init];
-    }
-    return self;
-}
-
 #pragma mark - UIViewControllerTransitioningDelegate
 
 - (UIPresentationController *)presentationControllerForPresentedViewController:(UIViewController *)presented presentingViewController:(UIViewController *)presenting sourceViewController:(UIViewController *)source {
@@ -50,9 +43,6 @@
         
         self.screenPercentage = 66.66;
         
-        self.direction = ADDataPresentationDirectionBottom;
-        
-        self.dimmingViewBackgroundColor = [UIColor colorWithWhite:0.f alpha:0.3f];
     }
     return self;
 }

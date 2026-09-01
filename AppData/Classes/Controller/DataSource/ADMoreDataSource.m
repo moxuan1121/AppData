@@ -104,14 +104,6 @@
     return nil;
 }
 
-- (UIImage *)makeThumbnailOfSize:(CGSize)size ofImage:(UIImage *)image {
-    UIGraphicsBeginImageContextWithOptions(size, NO, UIScreen.mainScreen.scale);
-    [image drawInRect:CGRectMake(0, 0, size.width, size.height)];
-    UIImage *newThumbnail = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
-    return newThumbnail;
-}
-
 #pragma mark - UITableViewDelegate
 
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {

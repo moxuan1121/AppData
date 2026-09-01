@@ -22,7 +22,7 @@
         self.configuration = configuration;
         
         self.dimmingView = [[UIView alloc] initWithFrame:CGRectZero];
-        self.dimmingView.backgroundColor = configuration.dimmingViewBackgroundColor;
+        self.dimmingView.backgroundColor = [UIColor colorWithWhite:0.f alpha:0.3f];
         self.dimmingView.alpha = 0;
         self.dimmingView.translatesAutoresizingMaskIntoConstraints = NO;
         
@@ -97,17 +97,7 @@
     } else {
         frame.size = [self sizeForChildContentContainer:self.presentedViewController withParentContainerSize:self.containerView.bounds.size];
         
-        switch (self.configuration.direction) {
-            case ADDataPresentationDirectionRight:
-                frame.origin.x = self.containerView.frame.size.width * (1 - (self.configuration.screenPercentage / 100));
-                break;
-            case ADDataPresentationDirectionBottom:
-                frame.origin.y = self.containerView.frame.size.height * (1 - (self.configuration.screenPercentage / 100));
-                break;
-            default:
-                frame.origin = CGPointZero;
-                break;
-        }
+        frame.origin.y = self.containerView.frame.size.height * (1 - (self.configuration.screenPercentage / 100));
     }
     
     return frame;
@@ -117,16 +107,7 @@
     if (self.configuration.customFrameHandler) {
         return self.configuration.customFrameHandler(self.containerView).size;
     }
-    switch (self.configuration.direction) {
-        case ADDataPresentationDirectionLeft:
-        case ADDataPresentationDirectionRight:
-            return CGSizeMake(parentSize.width * (self.configuration.screenPercentage / 100), parentSize.height);
-        case ADDataPresentationDirectionTop:
-        case ADDataPresentationDirectionBottom:
-            return CGSizeMake(parentSize.width, parentSize.height * (self.configuration.screenPercentage / 100));
-        default:
-            return CGSizeZero;
-    }
+    return CGSizeMake(parentSize.width, parentSize.height * (self.configuration.screenPercentage / 100));
 }
 
 @end

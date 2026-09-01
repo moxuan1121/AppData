@@ -8,10 +8,6 @@
 
 #import "ADActionsBarView.h"
 
-@interface ADActionsBarView ()
-@property (nonatomic, strong) UIStackView *stackView;
-@end
-
 @interface ADActionButton : UIButton
 @property (nonatomic, strong) ADActionBarBlock actionBlock;
 @property (nonatomic, strong) ADActionBarBlock longPressActionBlock;
@@ -71,7 +67,6 @@
     view.activityIndicatorView = [ADAppearance.sharedInstance activityIndicatorView];
     view.activityIndicatorView.userInteractionEnabled = NO;
     view.activityIndicatorView.translatesAutoresizingMaskIntoConstraints = NO;
-    [view.activityIndicatorView hidesWhenStopped];
     [view.activityIndicatorView stopAnimating];
     [view addSubview:view.activityIndicatorView];
     
@@ -81,7 +76,6 @@
     [view.activityIndicatorView.heightAnchor constraintEqualToConstant:31].active = YES;
 
     view.nameLabel = [[UILabel alloc] init];
-    view.nameLabel.tag = 2;
     view.nameLabel.userInteractionEnabled = NO;
     view.nameLabel.textAlignment = NSTextAlignmentCenter;
     view.nameLabel.font = [UIFont systemFontOfSize:11];
@@ -103,7 +97,6 @@
     if (detail && detail.length > 0) {
         [view.nameLabel.heightAnchor constraintEqualToAnchor:view.heightAnchor multiplier:0.35].active = YES;
         view.detailLabel = [[UILabel alloc] init];
-        view.detailLabel.tag = 3;
         view.detailLabel.userInteractionEnabled = NO;
         view.detailLabel.textAlignment = NSTextAlignmentCenter;
         view.detailLabel.font = [UIFont systemFontOfSize:11];
@@ -137,11 +130,6 @@
     button.actionImageView.alpha = enabled ? 1.0 : 0.5;
     button.nameLabel.alpha = enabled ? 1.0 : 0.5;
     button.detailLabel.alpha = enabled ? 1.0 : 0.5;
-}
-
-- (void)setTitle:(NSString *)title forItemAtIndex:(NSInteger)index {
-    ADActionButton *button = [self.arrangedSubviews objectAtIndex:index];
-    [button.nameLabel setText:title];
 }
 
 - (void)setDetail:(NSString *)detail forItemAtIndex:(NSInteger)index {

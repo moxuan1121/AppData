@@ -73,7 +73,6 @@
 @interface SBApplication : NSObject
 @property (nonatomic, retain) SBApplicationInfo * info;
 @property (nonatomic,readonly) NSString * displayName;
--(void)purgeCaches;
 - (NSString *)bundleIdentifier;
 @end
 

@@ -178,7 +178,6 @@ static inline CGFloat ADIconContinuousCornerRadiusForSide(CGFloat side) {
             
             if (IS_IPAD) {
                 dataViewController.contentView.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner | kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
-                dataViewController.presentationManager.configuration.fadeAnimationAlpha = 0;
                 dataViewController.presentationManager.configuration.fadeAnimation = YES;
                 dataViewController.presentationManager.configuration.customFrameHandler = ^CGRect(UIView *containerView) {
                     CGSize size = CGSizeMake(containerView.frame.size.width * 0.5, containerView.frame.size.height * 0.5);

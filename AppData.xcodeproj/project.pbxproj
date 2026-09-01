@@ -45,7 +45,6 @@
 		A4C5FD5926123483005FD2D8 /* ADSettings.m in Sources */ = {isa = PBXBuildFile; fileRef = A4C5FD5626123481005FD2D8 /* ADSettings.m */; };
 		A4C5FD702612376F005FD2D8 /* ADSelectListTableViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = A4C5FD632612376E005FD2D8 /* ADSelectListTableViewController.m */; };
 		A4C5FD722612376F005FD2D8 /* ADHeaderTableViewCell.m in Sources */ = {isa = PBXBuildFile; fileRef = A4C5FD692612376F005FD2D8 /* ADHeaderTableViewCell.m */; };
-		A4C5FD742612376F005FD2D8 /* ADPrefsHelper.m in Sources */ = {isa = PBXBuildFile; fileRef = A4C5FD6B2612376F005FD2D8 /* ADPrefsHelper.m */; };
 		A4C5FD7D26123D40005FD2D8 /* ADSwitchTableViewCell.m in Sources */ = {isa = PBXBuildFile; fileRef = A4C5FD7B26123D40005FD2D8 /* ADSwitchTableViewCell.m */; };
 		A4C5FD8A26125556005FD2D8 /* ADAppearance.h in Headers */ = {isa = PBXBuildFile; fileRef = A4C5FD8826125556005FD2D8 /* ADAppearance.h */; };
 		A4C5FD8B26125556005FD2D8 /* ADAppearance.m in Sources */ = {isa = PBXBuildFile; fileRef = A4C5FD8926125556005FD2D8 /* ADAppearance.m */; };
@@ -118,8 +117,6 @@
 		A4C5FD632612376E005FD2D8 /* ADSelectListTableViewController.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ADSelectListTableViewController.m; sourceTree = "<group>"; };
 		A4C5FD662612376F005FD2D8 /* ADHeaderTableViewCell.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ADHeaderTableViewCell.h; sourceTree = "<group>"; };
 		A4C5FD692612376F005FD2D8 /* ADHeaderTableViewCell.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ADHeaderTableViewCell.m; sourceTree = "<group>"; };
-		A4C5FD6B2612376F005FD2D8 /* ADPrefsHelper.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ADPrefsHelper.m; sourceTree = "<group>"; };
-		A4C5FD6C2612376F005FD2D8 /* ADPrefsHelper.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ADPrefsHelper.h; sourceTree = "<group>"; };
 		A4C5FD7926123916005FD2D8 /* Package */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Package; sourceTree = "<group>"; };
 		A4C5FD7B26123D40005FD2D8 /* ADSwitchTableViewCell.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ADSwitchTableViewCell.m; sourceTree = "<group>"; };
 		A4C5FD7C26123D40005FD2D8 /* ADSwitchTableViewCell.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ADSwitchTableViewCell.h; sourceTree = "<group>"; };
@@ -339,8 +336,6 @@
 			children = (
 				A4C5FD642612376E005FD2D8 /* Cells */,
 				A4C5FD5B2612376E005FD2D8 /* Controllers */,
-				A4C5FD6C2612376F005FD2D8 /* ADPrefsHelper.h */,
-				A4C5FD6B2612376F005FD2D8 /* ADPrefsHelper.m */,
 			);
 			path = Classes;
 			sourceTree = "<group>";
@@ -606,7 +601,6 @@
 			files = (
 				A4C5FD54261233B1005FD2D8 /* ADPreferencesController.m in Sources */,
 				A4C5FD702612376F005FD2D8 /* ADSelectListTableViewController.m in Sources */,
-				A4C5FD742612376F005FD2D8 /* ADPrefsHelper.m in Sources */,
 				A4C5FD7D26123D40005FD2D8 /* ADSwitchTableViewCell.m in Sources */,
 				A4C5FD722612376F005FD2D8 /* ADHeaderTableViewCell.m in Sources */,
 				A4C5FD5926123483005FD2D8 /* ADSettings.m in Sources */,
