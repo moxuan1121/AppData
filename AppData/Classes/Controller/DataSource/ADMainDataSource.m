@@ -252,7 +252,12 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    if (self.completion) self.completion(self.versions[indexPath.row]);
+    NSDictionary *version = self.versions[indexPath.row];
+    ADVersionSelectionCompletion completion = self.completion;
+    self.completion = nil;
+    [self.navigationController dismissViewControllerAnimated:NO completion:^{
+        if (completion) completion(version);
+    }];
 }
 
 @end

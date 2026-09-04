@@ -55,6 +55,12 @@ class DowngradeInteractionContractTests(unittest.TestCase):
         self.assertNotIn("indexOfObjectPassingTest", DATA_SOURCE)
         self.assertIn("indicesByKey[key]", DATA_SOURCE)
 
+    def test_version_picker_closes_before_dismissing_appdata_panel(self):
+        selection = DATA_SOURCE.index("- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:", DATA_SOURCE.index("@implementation ADVersionSelectionViewController"))
+        end = DATA_SOURCE.index("@end", selection)
+        body = DATA_SOURCE[selection:end]
+        self.assertLess(body.index("dismissViewControllerAnimated:NO"), body.index("completion(version)"))
+
 
 if __name__ == "__main__":
     unittest.main()
