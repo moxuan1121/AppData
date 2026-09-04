@@ -33,7 +33,7 @@ class PackageLifecycleContractTests(unittest.TestCase):
         self.assertNotIn("rm ", POSTINST)
 
     def test_roothide_dependency_and_version_are_explicit(self):
-        self.assertIn("Version: 1.8.17", CONTROL)
+        self.assertIn("Version: 1.8.18", CONTROL)
         self.assertIn("firmware (>= 15.0)", CONTROL)
         self.assertIn("firmware (<< 16.0)", CONTROL)
         self.assertIn("roothide", CONTROL)
