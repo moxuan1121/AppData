@@ -62,6 +62,7 @@
 @end
 
 typedef void (^ADAppSelectionCompletion)(NSArray<NSString *> *selectedBundleIdentifiers);
+typedef void (^ADVersionSelectionCompletion)(NSDictionary *version);
 static const void *ADDowngradeOriginalStoreAccountKey = &ADDowngradeOriginalStoreAccountKey;
 static const void *ADDowngradeInitialVersionKey = &ADDowngradeInitialVersionKey;
 static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonitorTokenKey;
@@ -204,6 +205,54 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
     }
     self.applications = [self applicationsByPrioritizingSelection:self.applications];
     [self updateSearchResultsForSearchController:self.searchController];
+}
+
+@end
+
+@interface ADVersionSelectionViewController : UITableViewController
+@property (nonatomic, copy) NSArray<NSDictionary *> *versions;
+@property (nonatomic, copy) ADVersionSelectionCompletion completion;
+- (instancetype)initWithVersions:(NSArray<NSDictionary *> *)versions completion:(ADVersionSelectionCompletion)completion;
+@end
+
+@implementation ADVersionSelectionViewController
+
+- (instancetype)initWithVersions:(NSArray<NSDictionary *> *)versions completion:(ADVersionSelectionCompletion)completion {
+    if (self = [super initWithStyle:UITableViewStylePlain]) {
+        self.title = @"选择版本";
+        self.versions = versions;
+        self.completion = completion;
+    }
+    return self;
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"取消" style:UIBarButtonItemStylePlain target:self action:@selector(cancelSelection)];
+    self.tableView.tableFooterView = [UIView new];
+}
+
+- (void)cancelSelection {
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    return self.versions.count;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    static NSString *reuseIdentifier = @"ADDowngradeVersionCell";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:reuseIdentifier];
+    if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:reuseIdentifier];
+    NSDictionary *version = self.versions[indexPath.row];
+    cell.textLabel.text = [NSString stringWithFormat:@"%@ (%@) · %@", version[@"version"] ?: @"暂无", version[@"versionId"] ?: @"", version[@"source"] ?: @""];
+    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+    return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if (self.completion) self.completion(self.versions[indexPath.row]);
 }
 
 @end
@@ -794,15 +843,16 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
 
 - (void)downgrade_fetchVersionProviders:(NSArray<NSDictionary *> *)providers
                                   index:(NSUInteger)index
-                                  appID:(NSString *)appID
-                                results:(NSMutableArray<NSDictionary *> *)results
-                               seenKeys:(NSMutableSet<NSString *> *)seenKeys
-                                 errors:(NSMutableArray<NSString *> *)errors
-                             completion:(void(^)(NSArray *versions, NSError *err))completion {
+                                appID:(NSString *)appID
+                              results:(NSMutableArray<NSDictionary *> *)results
+                         indicesByKey:(NSMutableDictionary<NSString *, NSNumber *> *)indicesByKey
+                                errors:(NSMutableArray<NSString *> *)errors
+                            completion:(void(^)(NSArray *versions, NSError *err))completion {
     if (index >= providers.count) {
+        NSArray *sortedResults = [results sortedArrayUsingDescriptors:@[[NSSortDescriptor sortDescriptorWithKey:@"date" ascending:NO]]];
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (results.count > 0) {
-                if (completion) completion([results copy], nil);
+            if (sortedResults.count > 0) {
+                if (completion) completion(sortedResults, nil);
             } else {
                 NSString *details = errors.count > 0 ? [errors componentsJoinedByString:@"；"] : @"所有数据源均未返回有效版本";
                 NSError *error = [NSError errorWithDomain:@"Downgrade.VersionHistory" code:404 userInfo:@{NSLocalizedDescriptionKey: [@"未找到历史版本记录：" stringByAppendingString:details]}];
@@ -851,17 +901,15 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
             NSUInteger added = 0;
             for (NSDictionary *version in normalized) {
                 NSString *key = [NSString stringWithFormat:@"%@|%@", version[@"versionId"], version[@"version"]];
-                if (![seenKeys containsObject:key]) {
-                    [seenKeys addObject:key];
+                NSNumber *existingIndexNumber = indicesByKey[key];
+                if (!existingIndexNumber) {
+                    indicesByKey[key] = @(results.count);
                     [results addObject:version];
                     added++;
                 } else {
                     // Keep provider priority, but let later providers fill metadata gaps.
-                    NSUInteger existingIndex = [results indexOfObjectPassingTest:^BOOL(NSDictionary *existing, NSUInteger idx, BOOL *stop) {
-                        NSString *existingKey = [NSString stringWithFormat:@"%@|%@", existing[@"versionId"], existing[@"version"]];
-                        return [existingKey isEqualToString:key];
-                    }];
-                    if (existingIndex != NSNotFound) {
+                    NSUInteger existingIndex = existingIndexNumber.unsignedIntegerValue;
+                    if (existingIndex < results.count) {
                         NSMutableDictionary *filled = [results[existingIndex] mutableCopy];
                         if ([filled[@"date"] length] == 0 && [version[@"date"] length] > 0) filled[@"date"] = version[@"date"];
                         if ([filled[@"size"] length] == 0 && [version[@"size"] length] > 0) filled[@"size"] = version[@"size"];
@@ -872,7 +920,7 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
             NSLog(@"[AppData Downgrade] provider=%@ valid=%lu added=%lu", name, (unsigned long)normalized.count, (unsigned long)added);
         }
         [session finishTasksAndInvalidate];
-        [self downgrade_fetchVersionProviders:providers index:index + 1 appID:appID results:results seenKeys:seenKeys errors:errors completion:completion];
+        [self downgrade_fetchVersionProviders:providers index:index + 1 appID:appID results:results indicesByKey:indicesByKey errors:errors completion:completion];
     }];
     [task resume];
 }
@@ -884,7 +932,7 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
         @{ @"name": @"agzy", @"url": @"https://app.agzy.cn/searchVersion?appid=%@" },
         @{ @"name": @"bilin", @"url": @"https://apis.bilin.eu.org/history/%@" }
     ];
-    [self downgrade_fetchVersionProviders:providers index:0 appID:appID results:[NSMutableArray array] seenKeys:[NSMutableSet set] errors:[NSMutableArray array] completion:completion];
+    [self downgrade_fetchVersionProviders:providers index:0 appID:appID results:[NSMutableArray array] indicesByKey:[NSMutableDictionary dictionary] errors:[NSMutableArray array] completion:completion];
 }
 
 - (void)_fallback_downgrade_installWithTrackID:(long long)trackId versionID:(long long)versionId {
@@ -1052,30 +1100,16 @@ static const void *ADDowngradeRestoreMonitorTokenKey = &ADDowngradeRestoreMonito
 }
 
 - (void)downgrade_presentVersionSelection:(NSArray *)versions trackID:(long long)trackId {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"选择版本" message:@"请选择要降级的版本" preferredStyle:UIAlertControllerStyleActionSheet];
-    NSArray *sortedVersions = [versions sortedArrayUsingDescriptors:@[[NSSortDescriptor sortDescriptorWithKey:@"date" ascending:NO]]];
-
-    for (NSDictionary *ver in sortedVersions) {
-        NSString *bVer = ver[@"version"] ?: @"暂无";
-        NSString *extId = ver[@"versionId"] ?: @"";
-        NSString *source = ver[@"source"] ?: @"";
-        NSString *title = [NSString stringWithFormat:@"%@ (%@) · %@", bVer, extId, source];
-
-        [alert addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            long long versionId = [ver[@"versionId"] longLongValue];
-            [self downgrade_installWithTrackID:trackId versionID:versionId];
-            [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
-            [self.dataViewController dismissImmediately];
-        }]];
-    }
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-
-    if (IS_IPAD && alert.popoverPresentationController) {
-        alert.popoverPresentationController.sourceView = self.dataViewController.view;
-        alert.popoverPresentationController.sourceRect = CGRectMake(self.dataViewController.view.bounds.size.width / 2.0, self.dataViewController.view.bounds.size.height / 2.0, 1.0, 1.0);
-        alert.popoverPresentationController.permittedArrowDirections = 0;
-    }
-    [self.dataViewController presentViewController:alert animated:YES completion:nil];
+    ADVersionSelectionViewController *picker = [[ADVersionSelectionViewController alloc] initWithVersions:versions completion:^(NSDictionary *version) {
+        [self downgrade_installWithTrackID:trackId versionID:[version[@"versionId"] longLongValue]];
+        [[UINotificationFeedbackGenerator new] notificationOccurred:UINotificationFeedbackTypeSuccess];
+        [self.dataViewController dismissImmediately];
+    }];
+    UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:picker];
+    navigationController.modalPresentationStyle = UIModalPresentationPageSheet;
+    navigationController.sheetPresentationController.detents = @[UISheetPresentationControllerDetent.mediumDetent, UISheetPresentationControllerDetent.largeDetent];
+    navigationController.sheetPresentationController.prefersGrabberVisible = YES;
+    [self.dataViewController presentViewController:navigationController animated:YES completion:nil];
 }
 
 #pragma mark - UITableViewDataSource

@@ -45,6 +45,16 @@ class DowngradeInteractionContractTests(unittest.TestCase):
         self.assertLess(background, metadata)
         self.assertLess(metadata, main)
 
+    def test_version_picker_uses_reusable_cells_instead_of_alert_actions(self):
+        method = DATA_SOURCE.index("- (void)downgrade_presentVersionSelection:")
+        end = DATA_SOURCE.index("#pragma mark - UITableViewDataSource", method)
+        body = DATA_SOURCE[method:end]
+        self.assertIn("ADVersionSelectionViewController", body)
+        self.assertNotIn("UIAlertAction", body)
+        self.assertIn("dequeueReusableCellWithIdentifier", DATA_SOURCE)
+        self.assertNotIn("indexOfObjectPassingTest", DATA_SOURCE)
+        self.assertIn("indicesByKey[key]", DATA_SOURCE)
+
 
 if __name__ == "__main__":
     unittest.main()
